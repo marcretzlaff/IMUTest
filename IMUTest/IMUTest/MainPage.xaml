@@ -12,8 +12,9 @@
         <Label x:Name="label_y" Text="Y:" FontSize="16" Padding="30,0,30,0"/>
 
         <Label>LINEAR ACCELERATION</Label>
-        <Button Text="Start" Clicked="Button_Clicked"/>
-        <Button Text="Stop" Clicked="Button_Clicked2"/>
+        <Button x:Name="button_start" Text="Start" Clicked="Button_Clicked"/>
+        <Button x:Name="button_stop" Text="Stop" Clicked="Button_Clicked2"/>
+        <Button Text="Calibrate" Clicked="Button_Clicked3"/>
         <Label x:Name="label_linz" Text="Z:" FontSize="16" Padding="30,0,30,0"/>
         <Label x:Name="label_linx" Text="X:" FontSize="16" Padding="30,0,30,0"/>
         <Label x:Name="label_liny" Text="Y:" FontSize="16" Padding="30,0,30,0"/>

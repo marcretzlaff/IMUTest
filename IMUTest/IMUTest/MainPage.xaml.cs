@@ -74,6 +74,7 @@ namespace IMUTest
             label_x.Text = "X:" + e.Reading.Acceleration.X.ToString();
             label_y.Text = "Y:" + e.Reading.Acceleration.Y.ToString();
             label_z.Text = "Z:" + e.Reading.Acceleration.Z.ToString();
+            label_Zeit.Text = DateTime.UtcNow.ToString();
         }
 
         private void Button_Clicked(object sender, EventArgs e)
@@ -180,9 +181,13 @@ namespace IMUTest
                 accelerationy += element.y;
                 accelerationz += element.z;
             }
-            acceleration[1, 0] = accelerationx / 40 + calibration[0];
-            acceleration[1, 1] = accelerationy / 40 + calibration[1];
-            acceleration[1, 2] = accelerationz / 40 + calibration[2];
+            acceleration[1, 0] = accelerationx / 40 - calibration[0];
+            acceleration[1, 1] = accelerationy / 40 - calibration[1];
+            acceleration[1, 2] = accelerationz / 40 - calibration[2];
+
+            if (!(acceleration[1, 0] > 0.1 || acceleration[1, 0] < -0.1)) acceleration[1, 0] = 0;
+            if (!(acceleration[1, 1] > 0.1 || acceleration[1, 1] < -0.1)) acceleration[1, 1] = 0;
+            if (!(acceleration[1, 2] > 0.1 || acceleration[1, 2] < -0.1)) acceleration[1, 2] = 0;
 
             AccVector accvector = new AccVector((float)acceleration[1, 0], (float)acceleration[1, 1], (float)acceleration[1, 2]);
             System.IO.File.AppendAllText(ringpath, accvector.ToString() + System.Environment.NewLine);

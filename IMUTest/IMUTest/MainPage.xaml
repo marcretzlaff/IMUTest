@@ -11,7 +11,8 @@
         <Label x:Name="label_z" Text="Z:" FontSize="16" Padding="30,0,30,0"/>
         <Label x:Name="label_x" Text="X:" FontSize="16" Padding="30,0,30,0"/>
         <Label x:Name="label_y" Text="Y:" FontSize="16" Padding="30,0,30,0"/>
-
+        <Label x:Name="label_roll" Text="Roll:" FontSize="16" Padding="30,0,30,0"/>
+        <Label x:Name="label_pitch" Text="Pitch:" FontSize="16" Padding="30,0,30,0"/>
         <Label>LINEAR ACCELERATION</Label>
         <Button x:Name="button_start" Text="Start" Clicked="Button_Clicked"/>
         <Button x:Name="button_stop" Text="Stop" Clicked="Button_Clicked2"/>

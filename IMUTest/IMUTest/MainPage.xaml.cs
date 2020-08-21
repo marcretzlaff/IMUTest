@@ -75,6 +75,9 @@ namespace IMUTest
             label_y.Text = "Y:" + e.Reading.Acceleration.Y.ToString();
             label_z.Text = "Z:" + e.Reading.Acceleration.Z.ToString();
             label_Zeit.Text = DateTime.UtcNow.ToString();
+
+            label_roll.Text = "Roll:" + (Math.Atan(e.Reading.Acceleration.Y / (Math.Sqrt(Math.Pow(e.Reading.Acceleration.X,2) + Math.Pow(e.Reading.Acceleration.Z,2)))) * 180 / Math.PI).ToString();
+            label_pitch.Text = "Pitch:" + (Math.Atan(-1 * e.Reading.Acceleration.X / (Math.Sqrt(Math.Pow(e.Reading.Acceleration.Y, 2) + Math.Pow(e.Reading.Acceleration.Z, 2)))) * 180 / Math.PI).ToString();
         }
 
         private void Button_Clicked(object sender, EventArgs e)

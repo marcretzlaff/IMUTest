@@ -24,12 +24,16 @@ namespace IMUTest
         private string velopath = null;
         private string positionpath = null;
         private string calipath = null;
-
+        private string rollpath = null;
+        private string pitchpath = null;
+        private string endpath = null;
 
         double[,] acceleration = new double[2, 3];
         double[,] velocity = new double[2,3];
         double[,] position = new double[2,3];
         double[]  calibration = new double[3] { 0, 0, 0 };
+        double[] roll = new double[2] { 0, 0};
+        double[] pitch = new double[2] { 0, 0};
 
         private AccVector[] buffer = new AccVector[40];
         private int index = 0;
@@ -52,6 +56,9 @@ namespace IMUTest
             velopath = System.IO.Path.Combine(storagepath, "velodata.csv");
             positionpath = System.IO.Path.Combine(storagepath, "positiondata.csv");
             calipath = System.IO.Path.Combine(storagepath, "calidata.csv");
+            rollpath = System.IO.Path.Combine(storagepath, "rolldata.csv");
+            pitchpath = System.IO.Path.Combine(storagepath, "pitchdata.csv");
+            endpath = System.IO.Path.Combine(storagepath, "enddata.csv");
 
             if (System.IO.File.Exists(linpath)) System.IO.File.Delete(linpath);
             if (System.IO.File.Exists(accpath)) System.IO.File.Delete(accpath);
@@ -59,6 +66,10 @@ namespace IMUTest
             if (System.IO.File.Exists(velopath)) System.IO.File.Delete(velopath);
             if (System.IO.File.Exists(positionpath)) System.IO.File.Delete(positionpath);
             if (System.IO.File.Exists(calipath)) System.IO.File.Delete(calipath);
+            if (System.IO.File.Exists(rollpath)) System.IO.File.Delete(rollpath);
+            if (System.IO.File.Exists(pitchpath)) System.IO.File.Delete(pitchpath);
+            if (System.IO.File.Exists(endpath)) System.IO.File.Delete(endpath);
+
         }
 
         private void linacc_read(object sender, EventArgs e)
@@ -71,13 +82,22 @@ namespace IMUTest
 
         private void acc_read(object sender, AccelerometerChangedEventArgs e)
         {
+            var time = DateTime.UtcNow;
             label_x.Text = "X:" + e.Reading.Acceleration.X.ToString();
             label_y.Text = "Y:" + e.Reading.Acceleration.Y.ToString();
             label_z.Text = "Z:" + e.Reading.Acceleration.Z.ToString();
-            label_Zeit.Text = DateTime.UtcNow.ToString();
+            label_Zeit.Text = time.ToString();
 
-            label_roll.Text = "Roll:" + (Math.Atan(e.Reading.Acceleration.Y / (Math.Sqrt(Math.Pow(e.Reading.Acceleration.X,2) + Math.Pow(e.Reading.Acceleration.Z,2)))) * 180 / Math.PI).ToString();
-            label_pitch.Text = "Pitch:" + (Math.Atan(-1 * e.Reading.Acceleration.X / (Math.Sqrt(Math.Pow(e.Reading.Acceleration.Y, 2) + Math.Pow(e.Reading.Acceleration.Z, 2)))) * 180 / Math.PI).ToString();
+
+            roll[1] = 0.95 * roll[0] + 0.05 * (Math.Atan(e.Reading.Acceleration.Y / (Math.Sqrt(Math.Pow(e.Reading.Acceleration.X, 2) + Math.Pow(e.Reading.Acceleration.Z, 2)))) * 180 / Math.PI);
+            label_roll.Text = "Roll:" + roll[1].ToString();
+            System.IO.File.AppendAllText(rollpath, time.ToString("ss.fff") + ';' + roll[1].ToString() + System.Environment.NewLine);
+            pitch[1] = 0.95 * pitch[0] + 0.05 * (Math.Atan(-1 * e.Reading.Acceleration.X / (Math.Sqrt(Math.Pow(e.Reading.Acceleration.Y, 2) + Math.Pow(e.Reading.Acceleration.Z, 2)))) * 180 / Math.PI);
+            label_pitch.Text = "Pitch:" + pitch[1].ToString();
+
+            roll[0] = roll[1];
+            pitch[0] = pitch[1];
+            System.IO.File.AppendAllText(pitchpath, time.ToString("ss.fff") + ';' + pitch[1].ToString() + System.Environment.NewLine);
         }
 
         private void Button_Clicked(object sender, EventArgs e)
@@ -188,12 +208,22 @@ namespace IMUTest
             acceleration[1, 1] = accelerationy / 40 - calibration[1];
             acceleration[1, 2] = accelerationz / 40 - calibration[2];
 
+            AccVector accvector = new AccVector((float)acceleration[1, 0], (float)acceleration[1, 1], (float)acceleration[1, 2]);
+            System.IO.File.AppendAllText(ringpath, accvector.ToString() + System.Environment.NewLine);
+
+            //vektortransformation
+
+            //Beschleunigung in x-Achse : Beschleunigung in x Achse aus Z-Sensor + Beschleunigung in x-Achse aus X-Sensor
+            acceleration[1, 0] = Math.Sin(roll[1]) * acceleration[1, 2] + Math.Cos(roll[1]) * acceleration[1, 0];
+            //Beschleunigung in y-Achse : Beschleunigung in y Achse aus Z-Sensor + Beschleunigung in y-Achse aus Y-Sensor
+            acceleration[1, 1] = Math.Sin(pitch[1]) * acceleration[1, 2] + Math.Cos(pitch[1]) * acceleration[1, 1];
+
+            AccVector korregiertervector = new AccVector((float)acceleration[1, 0], (float)acceleration[1, 1], (float)acceleration[1, 2]);
+            System.IO.File.AppendAllText(endpath, korregiertervector.ToString() + System.Environment.NewLine);
+
             if (!(acceleration[1, 0] > 0.1 || acceleration[1, 0] < -0.1)) acceleration[1, 0] = 0;
             if (!(acceleration[1, 1] > 0.1 || acceleration[1, 1] < -0.1)) acceleration[1, 1] = 0;
             if (!(acceleration[1, 2] > 0.1 || acceleration[1, 2] < -0.1)) acceleration[1, 2] = 0;
-
-            AccVector accvector = new AccVector((float)acceleration[1, 0], (float)acceleration[1, 1], (float)acceleration[1, 2]);
-            System.IO.File.AppendAllText(ringpath, accvector.ToString() + System.Environment.NewLine);
 
             //integrate
             velocity[1, 0] = velocity[0, 0] + acceleration[0, 0] + ((acceleration[1, 0] - acceleration[0, 0]) / 2);

@@ -29,7 +29,8 @@ namespace IMUTest.Droid
 
         public void Start()
         {
-            sensorManager.RegisterListener(this, linearSensor, SensorDelay.Ui);
+            //Sensor Speed UI: 40ms Normal: 40ms Game: 40ms Fastest: 20ms
+            sensorManager.RegisterListener(this, linearSensor, SensorDelay.Fastest);
         }
 
         public void Stop()

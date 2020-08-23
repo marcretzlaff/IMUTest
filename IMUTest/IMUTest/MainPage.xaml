@@ -20,6 +20,8 @@
         <Label x:Name="label_linz" Text="Z:" FontSize="16" Padding="30,0,30,0"/>
         <Label x:Name="label_linx" Text="X:" FontSize="16" Padding="30,0,30,0"/>
         <Label x:Name="label_liny" Text="Y:" FontSize="16" Padding="30,0,30,0"/>
+        <Label x:Name="label_rollcali" Text="Roll:" FontSize="16" Padding="30,0,30,0"/>
+        <Label x:Name="label_pitchcali" Text="Pitch:" FontSize="16" Padding="30,0,30,0"/>
     </StackLayout>
 
 </ContentPage>

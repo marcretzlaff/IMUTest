@@ -31,6 +31,7 @@ namespace IMUTest
         private string calipath = null;
         private string orientationpath = null;
         private string endpath = null;
+        private string timepath = null;
 
         double[,] acceleration = new double[2, 3];
         double[,] xyacceleration = new double[2, 2];
@@ -59,6 +60,7 @@ namespace IMUTest
             calipath = System.IO.Path.Combine(storagepath, "calidata.csv");
             orientationpath = System.IO.Path.Combine(storagepath, "orientationdata.csv");
             endpath = System.IO.Path.Combine(storagepath, "enddata.csv");
+            timepath = System.IO.Path.Combine(storagepath, "timedata.csv");
 
             if (System.IO.File.Exists(linpath)) System.IO.File.Delete(linpath);
             if (System.IO.File.Exists(accpath)) System.IO.File.Delete(accpath);
@@ -68,6 +70,7 @@ namespace IMUTest
             if (System.IO.File.Exists(calipath)) System.IO.File.Delete(calipath);
             if (System.IO.File.Exists(orientationpath)) System.IO.File.Delete(orientationpath);
             if (System.IO.File.Exists(endpath)) System.IO.File.Delete(endpath);
+            if (System.IO.File.Exists(timepath)) System.IO.File.Delete(timepath); 
 
         }
 
@@ -83,9 +86,7 @@ namespace IMUTest
         private void roll_pitch_calibration(object sender, EventArgs e)
         {
             rollcalibration[1] = 0.9 * rollcalibration[0] + 0.1 * (e as OrientationEventArgs).roll;
-            label_rollcali.Text = "Roll:" + rollcalibration[1].ToString();
             pitchcalibration[1] = 0.9 * pitchcalibration[0] + 0.1 * (e as OrientationEventArgs).pitch;
-            label_pitchcali.Text = "Pitch:" + pitchcalibration[1].ToString();
             rollcalibration[0] = rollcalibration[1];
             pitchcalibration[0] = pitchcalibration[1];
         }
@@ -106,8 +107,8 @@ namespace IMUTest
             roll[0] = rollcalibration[1];
             pitch[0] = pitchcalibration[1];
             linacctime[1] = DateTime.UtcNow;
+            label_onoff.Text = "ON";
 
-            accservice.ValuesChanged += linacc_read;
             accservice.ValuesChanged += SaveLin;
             orientationservice.ValuesChanged += save_orientation;
             Accelerometer.ReadingChanged += SaveAcc;
@@ -117,6 +118,9 @@ namespace IMUTest
         {
             OrientationEventArgs args = e as OrientationEventArgs;
             OrientationVector vec = new OrientationVector(args.azimoth, args.roll, args.pitch);
+            label_pitch.Text = "Pitch:" + args.pitch.ToString();
+            label_roll.Text = "Roll:" + args.roll.ToString();
+            label_yaw.Text = "Yaw:" + args.azimoth.ToString();
             System.IO.File.AppendAllText(orientationpath, vec.ToString(DateTime.UtcNow) + System.Environment.NewLine);
         }
 
@@ -125,7 +129,7 @@ namespace IMUTest
         {
             accservice = DependencyService.Resolve<IServiceACC>();
             accservice.Stop();
-
+            label_onoff.Text = "OFF";
             Accelerometer.ReadingChanged -= SaveAcc;
             orientationservice.ValuesChanged -= save_orientation;
         }
@@ -133,19 +137,19 @@ namespace IMUTest
         private void Button_Clicked3(object sender, EventArgs e)
         {
             button_start.IsEnabled = false;
+            label_cali.Text = "Calibration";
             accservice = DependencyService.Resolve<IServiceACC>();
             accservice.Init();
             orientationservice = DependencyService.Resolve<IServiceOrientation>();
             orientationservice.Init();
-            accservice.ValuesChanged += linacc_read;
             accservice.ValuesChanged += Calibrate;
             orientationservice.ValuesChanged += roll_pitch_calibration;
 
             Device.StartTimer(TimeSpan.FromSeconds(5), () =>
             {
-                accservice.ValuesChanged -= linacc_read;
                 accservice.ValuesChanged -= Calibrate;
                 orientationservice.ValuesChanged -= roll_pitch_calibration;
+                label_cali.Text = "Calibrated";
                 return false; // return true to repeat counting, false to stop timer
             });
             button_start.IsEnabled = true;
@@ -160,21 +164,15 @@ namespace IMUTest
         }
 
         #region linacc
-        private void linacc_read(object sender, EventArgs e)
-        {
-            AccEventArgs args = e as AccEventArgs;
-            linacctime[0] = linacctime[1];
-            linacctime[1] = DateTime.UtcNow;
-            linaccspan = linacctime[1] - linacctime[0];
-            label_linx.Text = "X:" + args.x.ToString();
-            label_liny.Text = "Y:" + args.y.ToString();
-            label_linz.Text = "Z:" + args.z.ToString();
-        }
-
         private void SaveLin(object sender, EventArgs e)
         {
             AccEventArgs args = e as AccEventArgs;
             AccVector vec = new AccVector(args.x, args.y, args.z);
+            linacctime[0] = linacctime[1];
+            linacctime[1] = DateTime.UtcNow;
+            linaccspan = linacctime[1] - linacctime[0];
+            System.IO.File.AppendAllText(timepath, linaccspan.TotalMilliseconds.ToString() + System.Environment.NewLine);
+
             integration(vec);
             System.IO.File.AppendAllText(linpath, vec.ToString(linacctime[1]) + System.Environment.NewLine);
         }
@@ -213,10 +211,10 @@ namespace IMUTest
 
             //vektortransformation
             //y | x <->
-            //Beschleunigung in y-Achse : Beschleunigung in y Achse aus Z-Sensor + Beschleunigung in y-Achse aus y-Sensor
-            xyacceleration[1, 1] = Math.Sin(roll[1] - rollcalibration[1]) * acceleration[1, 2] + Math.Cos(roll[1] - rollcalibration[1]) * acceleration[1, 1];
-            //Beschleunigung in x-Achse : Beschleunigung in x Achse aus Z-Sensor + Beschleunigung in x-Achse aus x-Sensor
-            xyacceleration[1, 0] = Math.Sin(pitch[1] - pitchcalibration[1]) * acceleration[1, 2] + Math.Cos(pitch[1] - pitchcalibration[1]) * acceleration[1, 0];
+            //Beschleunigung in y-Achse
+            xyacceleration[1, 1] = Math.Cos(roll[1] - rollcalibration[1]) * acceleration[1, 1];
+            //Beschleunigung in x-Achse
+            xyacceleration[1, 0] = Math.Cos(pitch[1] - pitchcalibration[1]) * acceleration[1, 0];
 
             //lowpass korriegierter
             xyacceleration[1, 0] = 0.50 * xyacceleration[0, 0] + 0.50 * xyacceleration[1, 0];

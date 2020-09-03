@@ -57,7 +57,6 @@ namespace IMUTest
             lowaccpath = System.IO.Path.Combine(storagepath, "lowaccdata.csv");
             velopath = System.IO.Path.Combine(storagepath, "velodata.csv");
             positionpath = System.IO.Path.Combine(storagepath, "positiondata.csv");
-            calipath = System.IO.Path.Combine(storagepath, "calidata.csv");
             orientationpath = System.IO.Path.Combine(storagepath, "orientationdata.csv");
             endpath = System.IO.Path.Combine(storagepath, "enddata.csv");
             timepath = System.IO.Path.Combine(storagepath, "timedata.csv");
@@ -67,7 +66,6 @@ namespace IMUTest
             if (System.IO.File.Exists(lowaccpath)) System.IO.File.Delete(lowaccpath);
             if (System.IO.File.Exists(velopath)) System.IO.File.Delete(velopath);
             if (System.IO.File.Exists(positionpath)) System.IO.File.Delete(positionpath);
-            if (System.IO.File.Exists(calipath)) System.IO.File.Delete(calipath);
             if (System.IO.File.Exists(orientationpath)) System.IO.File.Delete(orientationpath);
             if (System.IO.File.Exists(endpath)) System.IO.File.Delete(endpath);
             if (System.IO.File.Exists(timepath)) System.IO.File.Delete(timepath); 
@@ -121,6 +119,10 @@ namespace IMUTest
             label_pitch.Text = "Pitch:" + args.pitch.ToString();
             label_roll.Text = "Roll:" + args.roll.ToString();
             label_yaw.Text = "Yaw:" + args.azimoth.ToString();
+            roll[1] = 0.5 * roll[0] + 0.5 * (args.roll - rollcalibration[1]);
+            pitch[1] = 0.5 * pitch[0] + 0.5 * (args.pitch - pitchcalibration[1]);
+            roll[0] = roll[1];
+            pitch[0] = pitch[1];
             System.IO.File.AppendAllText(orientationpath, vec.ToString(DateTime.UtcNow) + System.Environment.NewLine);
         }
 
@@ -188,47 +190,36 @@ namespace IMUTest
             calibration[0, 0] = calibration[1, 0];
             calibration[0, 1] = calibration[1, 1];
             calibration[0, 2] = calibration[1, 1];
-
-            AccVector accvector = new AccVector((float)calibration[1,0], (float)calibration[1,1], (float)calibration[1,2]);
-            System.IO.File.AppendAllText(calipath, accvector.ToString(linacctime[1]) + System.Environment.NewLine);
         }
 
         #endregion linacc
 
         private void integration(AccVector vec)
         {
-            acceleration[1, 0] = 0.5 * acceleration[0, 0] + 0.5 * vec.x - calibration[1,0];
-            acceleration[1, 1] = 0.5 * acceleration[0, 1] + 0.5 * vec.y - calibration[1,1];
-            acceleration[1, 2] = 0.5 * acceleration[0, 2] + 0.5 * vec.z - calibration[1,2];
+            acceleration[1, 0] = (0.5 * acceleration[0, 0]) + (0.5 * (vec.x - calibration[1,0]));
+            acceleration[1, 1] = (0.5 * acceleration[0, 1]) + (0.5 * (vec.y - calibration[1,1]));
+            acceleration[1, 2] = (0.5 * acceleration[0, 2]) + (0.5 * (vec.z - calibration[1,2]));
 
             AccVector accvector = new AccVector((float)acceleration[1, 0], (float)acceleration[1, 1], (float)acceleration[1, 2]);
             System.IO.File.AppendAllText(lowaccpath, accvector.ToString(linacctime[1]) + System.Environment.NewLine);
 
             acceleration[0, 0] = acceleration[1, 0];
             acceleration[0, 1] = acceleration[1, 1];
-            acceleration[0, 2] = acceleration[1, 2];
 
 
             //vektortransformation
             //y | x <->
             //Beschleunigung in y-Achse
-            xyacceleration[1, 1] = Math.Cos(roll[1] - rollcalibration[1]) * acceleration[1, 1];
+            xyacceleration[1, 1] = Math.Cos(Math.PI * roll[1] / 180) * acceleration[1, 1] + Math.Sin(Math.PI * roll[1] / 180) * acceleration[1, 2];
             //Beschleunigung in x-Achse
-            xyacceleration[1, 0] = Math.Cos(pitch[1] - pitchcalibration[1]) * acceleration[1, 0];
+            xyacceleration[1, 0] = Math.Cos(Math.PI * pitch[1] / 180) * acceleration[1, 0] + Math.Sin(Math.PI * pitch[1] / 180) * acceleration[1, 2];
 
             //lowpass korriegierter
             xyacceleration[1, 0] = 0.50 * xyacceleration[0, 0] + 0.50 * xyacceleration[1, 0];
             xyacceleration[1, 1] = 0.50 * xyacceleration[0, 1] + 0.50 * xyacceleration[1, 1];
 
-            xyacceleration[0, 0] = xyacceleration[1, 0];
-            xyacceleration[0, 1] = xyacceleration[1, 1];
-
             AccVector korregiertervector = new AccVector((float)xyacceleration[1, 0], (float)xyacceleration[1, 1], (float)acceleration[1, 2]);
-            System.IO.File.AppendAllText(endpath, korregiertervector.ToString(linacctime[1]) + System.Environment.NewLine);
-            
-            xyacceleration[1, 0] = acceleration[1, 0];
-            xyacceleration[1, 1] = acceleration[1, 1];
-
+            System.IO.File.AppendAllText(endpath, korregiertervector.ToString(linacctime[1])+ System.Environment.NewLine);
 
             if (!(xyacceleration[1, 0] > 0.05 || xyacceleration[1, 0] < -0.05)) xyacceleration[1, 0] = 0;
             if (!(xyacceleration[1, 1] > 0.05 || xyacceleration[1, 1] < -0.05)) xyacceleration[1, 1] = 0;
@@ -250,8 +241,6 @@ namespace IMUTest
             //z-achse eigentlich latte
             velocity[1, 2] = velocity[0, 2] + (acceleration[0, 2] + (acceleration[1, 2] - acceleration[0, 2]) / 2) * linaccspan.TotalSeconds;
 
-
-
             AccVector velovector = new AccVector((float)velocity[1, 0], (float)velocity[1, 1], (float)velocity[1, 2]);
             System.IO.File.AppendAllText(velopath, velovector.ToString(linacctime[1]) + System.Environment.NewLine);
 
@@ -262,6 +251,10 @@ namespace IMUTest
 
             AccVector posvector = new AccVector((float)position[1, 0], (float)position[1, 1], (float)position[1, 2]);
             System.IO.File.AppendAllText(positionpath, posvector.ToString(linacctime[1]) + System.Environment.NewLine);
+
+            xyacceleration[0, 0] = xyacceleration[1, 0];
+            xyacceleration[0, 1] = xyacceleration[1, 1];
+            acceleration[0, 2] = acceleration[1, 2];
 
             velocity[0, 0] = velocity[1, 0];
             velocity[0, 1] = velocity[1, 1];

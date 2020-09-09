@@ -54,11 +54,12 @@
     <Reference Include="System.Numerics.Vectors" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Xamarin.Forms" Version="4.8.0.1269" />
+    <PackageReference Include="Xamarin.Forms" Version="4.8.0.1364" />
     <PackageReference Include="Xamarin.Essentials" Version="1.5.3.2" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DependencyServiceAcc.cs" />
+    <Compile Include="DependencyServiceRotation.cs" />
     <Compile Include="DependencyServiceOrientation.cs" />
     <Compile Include="DependencyServiceFile.cs" />
     <Compile Include="MainActivity.cs" />

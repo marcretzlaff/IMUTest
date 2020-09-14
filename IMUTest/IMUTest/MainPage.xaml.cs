@@ -21,11 +21,10 @@ namespace IMUTest
     public partial class MainPage : ContentPage
     {
         private IServiceACC accservice = null;
-        private IServiceOrientation orientationservice = null;
         private IServiceRotation rotationservice = null;
 
         private DateTime acctime;
-        private DateTime[] linacctime =  new DateTime[2];
+        private DateTime[] linacctime = new DateTime[2];
         private TimeSpan linaccspan;
         private float[] rotationMatrix = new float[9];
 
@@ -35,28 +34,22 @@ namespace IMUTest
         private string positionpath = null;
         private string endpath = null;
         private string timepath = null;
+        private string dkfpath = null;
 
         double[,] acceleration = new double[2, 3];
         double[,] xyacceleration = new double[2, 3];
-        double[,] velocity = new double[2,3];
-        double[,] position = new double[2,3];
-        double[,]  calibration = new double[2,3];
+        double[,] velocity = new double[2, 3];
+        double[,] position = new double[2, 3];
+        double[,] calibration = new double[2, 3];
         private int endcount;
 
-        Matrix<double> x0 = Matrix<double>.Build.Dense(6, 1, new[] { 0d, 0d, 0d, 0d, 0d, 0d }); // State Representation: [x y x' y' x'' y'']
-        Matrix<double> p0 = null; //Covariance of inital State (same as x0) as we start at zero
-        Matrix<double> F = Matrix<double>.Build.Dense(6, 6, new[] { 0d, 0d, 0d, 0d, 0d, 0d,   // State Transition Matrix: [ 1 0 T 0 .5T^2   0
-                                                                    0d, 0d, 0d, 0d, 0d, 0d,   //                            0 1 0 T   0   .5T^2
-                                                                    0d, 0d, 0d, 0d, 0d, 0d,   //                            0 0 1 0   T     0
-                                                                    0d, 0d, 0d, 0d, 0d, 0d,   //                            0 0 0 1   0     T
-                                                                    0d, 0d, 0d, 0d, 0d, 0d,   //                            0 0 0 0   1     0
-                                                                    0d, 0d, 0d, 0d, 0d, 0d}); //                            0 0 0 0   0     1  ]
-
-        Matrix<double> H = Matrix<double>.Build.Dense(6, 4, new[] { 0d, 0d, 0d, 0d, 0d, 0d,   // Measurement Model: [ 0 0 0 0 0 0
-                                                                    0d, 0d, 0d, 0d, 0d, 0d,   //                      0 0 0 0 0 0
-                                                                    0d, 0d, 0d, 0d, 1d, 0d,   //                      0 0 0 0 1 0
+        Matrix<double> x0 = Matrix<double>.Build.Dense(6, 1, new[] { 0d, 0d, 0d, 0d, 0d, 0d }); // State Representation: [ x y x' y' x'' y'']
+        Matrix<double> p0 = Matrix<double>.Build.Dense(6, 6); //Covariance of inital State (same as x0 with m x m) as we start at zero
+        Matrix<double> H = Matrix<double>.Build.Dense(2, 6, new[] { 0d, 0d, 0d, 0d, 1d, 0d,   // Measurement Model: [ 0 0 0 0 1 0
                                                                     0d, 0d, 0d, 0d, 0d, 1d}); //                      0 0 0 0 0 1 ]
 
+        Matrix<double> R = Matrix<double>.Build.Dense(2, 2, new[] { 0.025d, 0d , 
+                                                                    0d, 0.025d});
         DiscreteKalmanFilter dkf = null;
 
         public MainPage()
@@ -73,6 +66,7 @@ namespace IMUTest
             positionpath = System.IO.Path.Combine(storagepath, "positiondata.csv");
             endpath = System.IO.Path.Combine(storagepath, "enddata.csv");
             timepath = System.IO.Path.Combine(storagepath, "timedata.csv");
+            dkfpath = System.IO.Path.Combine(storagepath, "dkfdata.csv");
 
             if (System.IO.File.Exists(linpath)) System.IO.File.Delete(linpath);
             if (System.IO.File.Exists(lowaccpath)) System.IO.File.Delete(lowaccpath);
@@ -80,9 +74,9 @@ namespace IMUTest
             if (System.IO.File.Exists(positionpath)) System.IO.File.Delete(positionpath);
             if (System.IO.File.Exists(endpath)) System.IO.File.Delete(endpath);
             if (System.IO.File.Exists(timepath)) System.IO.File.Delete(timepath);
+            if (System.IO.File.Exists(dkfpath)) System.IO.File.Delete(dkfpath);
 
-            //p0 = x0.Clone();
-            //dkf = new DiscreteKalmanFilter(x0, p0);
+            dkf = new DiscreteKalmanFilter(x0, p0);
         }
 
         private void acc_read(object sender, AccelerometerChangedEventArgs e)
@@ -122,6 +116,7 @@ namespace IMUTest
             accservice.Stop();
             label_onoff.Text = "OFF";
             rotationservice.ValuesChanged -= save_rotation;
+            accservice.ValuesChanged -= SaveLin;
         }
 
         private void Button_Clicked3(object sender, EventArgs e)
@@ -199,22 +194,27 @@ namespace IMUTest
             AccVector korregiertervector = new AccVector((float)xyacceleration[1, 0], (float)xyacceleration[1, 1], (float)xyacceleration[1, 2]);
             System.IO.File.AppendAllText(endpath, korregiertervector.ToString(linacctime[1]) + System.Environment.NewLine);
 
-            /*
-            F = Matrix<double>.Build.Dense(4, 4, new[] { 1d, 0d, linaccspan.TotalSeconds, 0d                     ,   // State Transition Matrix: [ 1 0 T 0
-                                                         0d, 1d, 0d                     , linaccspan.TotalSeconds,   //                            0 1 0 T
-                                                         0d, 0d, 1d                     , 0d                     ,   //                            0 0 1 0
-                                                         0d, 0d, 0d                     , 1d                     }); //                            0 0 0 1 ]
+
+            Matrix<double> F = Matrix<double>.Build.Dense(6, 6, new[] { 1d, 0d, 1d, 0d,  0.5d, 0d,   // State Transition Matrix: [ 1 0 T 0 .5T^2   0
+                                                                        0d, 1d, 0d, 1d, 0d, 0.5d,   //                            0 1 0 T   0   .5T^2
+                                                                        0d, 0d, 1d, 0d, 1d, 0d,   //                            0 0 1 0   T     0
+                                                                        0d, 0d, 0d, 1d, 0d, 1d,   //                            0 0 0 1   0     T
+                                                                        0d, 0d, 0d, 0d, 1d, 0d,                        //                            0 0 0 0   1     0
+                                                                        0d, 0d, 0d, 0d, 0d, 1d});                      //                            0 0 0 0   0     1  ]
             //kalmann
             dkf.Predict(F);
-            */
 
             if (!(xyacceleration[1, 0] > 0.05 || xyacceleration[1, 0] < -0.05)) xyacceleration[1, 0] = 0;
             if (!(xyacceleration[1, 1] > 0.05 || xyacceleration[1, 1] < -0.05)) xyacceleration[1, 1] = 0;
             if (!(xyacceleration[1, 2] > 0.05 || xyacceleration[1, 2] < -0.05)) xyacceleration[1, 2] = 0;
 
+            Matrix<double> z = Matrix<double>.Build.Dense(2, 1, new[] { xyacceleration[1,0], xyacceleration[1,1] }); // Measurement: [x'' y'']
+            dkf.Update(z,H,R);
+            System.IO.File.AppendAllText(dkfpath, linacctime[1].ToString("ss.fff") + ';' + dkf.State[0,0].ToString() + ';' + dkf.State[1,0] + System.Environment.NewLine);
+
             //end of movement
             if ((Math.Abs(xyacceleration[1, 0]) <= 0.01) && (Math.Abs(xyacceleration[1, 1]) <= 0.01)) endcount++; //vergleich auf 0
-            if(endcount > 10)
+            if(endcount > 5)
             {
                 endcount = 0;
                 //die von davor 0 damit die danach auch null sind
@@ -228,8 +228,8 @@ namespace IMUTest
             //z-achse eigentlich latte
             velocity[1, 2] = velocity[0, 2] + (xyacceleration[0, 2] + (xyacceleration[1, 2] - xyacceleration[0, 2]) / 2) * linaccspan.TotalSeconds;
 
-            //AccVector velovector = new AccVector((float)velocity[1, 0], (float)velocity[1, 1], (float)velocity[1, 2]);
-            //System.IO.File.AppendAllText(velopath, velovector.ToString(linacctime[1]) + System.Environment.NewLine);
+            AccVector velovector = new AccVector((float)velocity[1, 0], (float)velocity[1, 1], (float)velocity[1, 2]);
+            System.IO.File.AppendAllText(velopath, velovector.ToString(linacctime[1]) + System.Environment.NewLine);
 
             //integrate
             position[1, 0] = position[0, 0] + (velocity[0, 0] + (velocity[1, 0] - velocity[0, 0]) / 2) * linaccspan.TotalSeconds;

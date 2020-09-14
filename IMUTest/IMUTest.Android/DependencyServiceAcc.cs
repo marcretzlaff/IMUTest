@@ -22,7 +22,7 @@ namespace IMUTest.Droid
 
         public void Init()
         {
-            sensorManager = (SensorManager)Forms.Context.GetSystemService(SensorService);
+            sensorManager = (SensorManager)Android.App.Application.Context.GetSystemService(SensorService);
             linearSensor = sensorManager.GetDefaultSensor(SensorType.LinearAcceleration);
             sensorManager.RegisterListener(this, linearSensor, SensorDelay.Ui);
         }

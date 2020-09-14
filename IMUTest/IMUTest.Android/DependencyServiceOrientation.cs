@@ -22,7 +22,7 @@ namespace IMUTest.Droid
 
         public void Init()
         {
-            sensorManager = (SensorManager)Forms.Context.GetSystemService(SensorService);
+            sensorManager = (SensorManager)Android.App.Application.Context.GetSystemService(SensorService);
             orientationSensor = sensorManager.GetDefaultSensor(SensorType.Orientation);
             sensorManager.RegisterListener(this, orientationSensor, SensorDelay.Ui);
         }

@@ -48,8 +48,13 @@ namespace IMUTest
         Matrix<double> H = Matrix<double>.Build.Dense(2, 6, new[] { 0d, 0d, 0d, 0d, 1d, 0d,   // Measurement Model: [ 0 0 0 0 1 0
                                                                     0d, 0d, 0d, 0d, 0d, 1d}); //                      0 0 0 0 0 1 ]
 
-        Matrix<double> R = Matrix<double>.Build.Dense(2, 2, new[] { 0.025d, 0d , 
+        Matrix<double> R = Matrix<double>.Build.Dense(2, 2, new[] { 0.05d, 0d , 
+                                                                    0d, 0.05d});
+
+        Matrix<double> Q = Matrix<double>.Build.Dense(2, 2, new[] { 0.025d, 0d ,   //plant noise covariance
                                                                     0d, 0.025d});
+
+
         DiscreteKalmanFilter dkf = null;
 
         public MainPage()
@@ -184,10 +189,10 @@ namespace IMUTest
             /* roation transform */
             for (int i = 0; i < 3; i++)
             {
-                float s = 0;
+                double s = 0;
                 for (int j = 0; j < 3; j++)
                 {
-                    s += (float)acceleration[1, j] * rotationMatrix[j + i * 3];
+                    s += acceleration[1, j] * rotationMatrix[j + i * 3];
                 }
                 xyacceleration[1,i] = s;
             }
@@ -195,22 +200,44 @@ namespace IMUTest
             System.IO.File.AppendAllText(endpath, korregiertervector.ToString(linacctime[1]) + System.Environment.NewLine);
 
 
-            Matrix<double> F = Matrix<double>.Build.Dense(6, 6, new[] { 1d, 0d, 1d, 0d,  0.5d, 0d,   // State Transition Matrix: [ 1 0 T 0 .5T^2   0
+            Matrix<double> F = Matrix<double>.Build.Dense(6, 6, new[] { 1d, 0d, 1d, 0d, 0.5d, 0d,   // State Transition Matrix: [ 1 0 T 0 .5T^2   0
                                                                         0d, 1d, 0d, 1d, 0d, 0.5d,   //                            0 1 0 T   0   .5T^2
                                                                         0d, 0d, 1d, 0d, 1d, 0d,   //                            0 0 1 0   T     0
                                                                         0d, 0d, 0d, 1d, 0d, 1d,   //                            0 0 0 1   0     T
                                                                         0d, 0d, 0d, 0d, 1d, 0d,                        //                            0 0 0 0   1     0
                                                                         0d, 0d, 0d, 0d, 0d, 1d});                      //                            0 0 0 0   0     1  ]
+            Matrix<double> G = Matrix<double>.Build.Dense(6, 2, new[] { 0.5d, 0d , //plant noise matrix
+                                                                        0d, 0.5d,
+                                                                        1d, 0d,
+                                                                        0d, 1d,
+                                                                        1d, 0d,
+                                                                        0d, 1d });
+            /*
+             * 
+            Matrix<double> F = Matrix<double>.Build.Dense(6, 6, new[] { 1d, 0d, linaccspan.TotalSeconds, 0d,  0.5 * linaccspan.TotalSeconds * linaccspan.TotalSeconds, 0d,   // State Transition Matrix: [ 1 0 T 0 .5T^2   0
+                                                                        0d, 1d, 0d, linaccspan.TotalSeconds, 0d, 0.5 * linaccspan.TotalSeconds * linaccspan.TotalSeconds,   //                            0 1 0 T   0   .5T^2
+                                                                        0d, 0d, 1d, 0d, linaccspan.TotalSeconds, 0d,   //                            0 0 1 0   T     0
+                                                                        0d, 0d, 0d, 1d, 0d, linaccspan.TotalSeconds,   //                            0 0 0 1   0     T
+                                                                        0d, 0d, 0d, 0d, 1d, 0d,                        //                            0 0 0 0   1     0
+                                                                        0d, 0d, 0d, 0d, 0d, 1d});                      //                            0 0 0 0   0     1  ]
+            Matrix<double> G = Matrix<double>.Build.Dense(6, 2, new[] { 0.5 * linaccspan.TotalSeconds * linaccspan.TotalSeconds, 0d , //plant noise matrix
+                                                                        0d, 0.5 * linaccspan.TotalSeconds * linaccspan.TotalSeconds,
+                                                                        linaccspan.TotalSeconds, 0d,
+                                                                        0d, linaccspan.TotalSeconds,
+                                                                        1d, 0d,
+                                                                        0d, 1d });
+            */
             //kalmann
-            dkf.Predict(F);
-
-            if (!(xyacceleration[1, 0] > 0.05 || xyacceleration[1, 0] < -0.05)) xyacceleration[1, 0] = 0;
-            if (!(xyacceleration[1, 1] > 0.05 || xyacceleration[1, 1] < -0.05)) xyacceleration[1, 1] = 0;
-            if (!(xyacceleration[1, 2] > 0.05 || xyacceleration[1, 2] < -0.05)) xyacceleration[1, 2] = 0;
+            dkf.Predict(F,G,Q);
 
             Matrix<double> z = Matrix<double>.Build.Dense(2, 1, new[] { xyacceleration[1,0], xyacceleration[1,1] }); // Measurement: [x'' y'']
             dkf.Update(z,H,R);
             System.IO.File.AppendAllText(dkfpath, linacctime[1].ToString("ss.fff") + ';' + dkf.State[0,0].ToString() + ';' + dkf.State[1,0] + System.Environment.NewLine);
+
+
+            if (!(xyacceleration[1, 0] > 0.05 || xyacceleration[1, 0] < -0.05)) xyacceleration[1, 0] = 0;
+            if (!(xyacceleration[1, 1] > 0.05 || xyacceleration[1, 1] < -0.05)) xyacceleration[1, 1] = 0;
+            if (!(xyacceleration[1, 2] > 0.05 || xyacceleration[1, 2] < -0.05)) xyacceleration[1, 2] = 0;
 
             //end of movement
             if ((Math.Abs(xyacceleration[1, 0]) <= 0.01) && (Math.Abs(xyacceleration[1, 1]) <= 0.01)) endcount++; //vergleich auf 0

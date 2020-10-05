@@ -10,131 +10,100 @@ using Java.IO;
 using Android.Text.Format;
 using System.IO;
 using System.Runtime.InteropServices.ComTypes;
-using Java.Util;
 using MathNet.Filtering.Kalman;
 using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
 using Android.Hardware;
+using System.Numerics;
+using CsvHelper;
+using System.Globalization;
+using System.Threading;
 
 namespace IMUTest
 {
     public partial class MainPage : ContentPage
     {
-        private IServiceACC accservice = null;
-        private IServiceRotation rotationservice = null;
-
-        private DateTime acctime;
-        private DateTime[] linacctime = new DateTime[2];
-        private TimeSpan linaccspan;
-        private float[] rotationMatrix = new float[9];
-
-        private string linpath = null;
-        private string lowaccpath = null;
-        private string velopath = null;
-        private string positionpath = null;
-        private string endpath = null;
-        private string timepath = null;
         private string dkfpath = null;
-
-        double[,] acceleration = new double[2, 3];
-        double[,] xyacceleration = new double[2, 3];
-        double[,] velocity = new double[2, 3];
-        double[,] position = new double[2, 3];
-        double[,] calibration = new double[2, 3];
-        private int endcount;
-
-        Matrix<double> x0 = Matrix<double>.Build.Dense(6, 1, new[] { 0d, 0d, 0d, 0d, 0d, 0d }); // State Representation: [ x y x' y' x'' y'']
-        Matrix<double> p0 = Matrix<double>.Build.Dense(6, 6); //Covariance of inital State (same as x0 with m x m) as we start at zero
-        Matrix<double> H = Matrix<double>.Build.Dense(2, 6, new[] { 0d, 0d, 0d, 0d, 1d, 0d,   // Measurement Model: [ 0 0 0 0 1 0
-                                                                    0d, 0d, 0d, 0d, 0d, 1d}); //                      0 0 0 0 0 1 ]
-
-        Matrix<double> R = Matrix<double>.Build.Dense(2, 2, new[] { 0.05d, 0d , 
-                                                                    0d, 0.05d});
-
-        Matrix<double> Q = Matrix<double>.Build.Dense(2, 2, new[] { 0.025d, 0d ,   //plant noise covariance
-                                                                    0d, 0.025d});
+        private string accloadpath = null;
+        private string positionloadpath = null;
+        List<Records> accrec;
+        SensorFusion fusion = null;
+        Timer acctimer;
+        Timer beacontimer;
+        int acccount = 0;
+        int beaconcount = 0;
 
 
-        DiscreteKalmanFilter dkf = null;
+        List<Records> beaconrec = new List<Records>();
 
         public MainPage()
         {
             InitializeComponent();
-            //Sensor Speed UI: 65ms Default 65ms Game 20ms Fastest 5ms
-            Accelerometer.Start(SensorSpeed.Game);
-            Accelerometer.ReadingChanged += acc_read;
-
+            fusion = SensorFusion.GetSensorFusion();
             var storagepath = DependencyService.Resolve<IFileSystem>().GetExternalStorage();
-            linpath = System.IO.Path.Combine(storagepath, "lindata.csv");
-            lowaccpath = System.IO.Path.Combine(storagepath, "lowaccdata.csv");
-            velopath = System.IO.Path.Combine(storagepath, "velodata.csv");
-            positionpath = System.IO.Path.Combine(storagepath, "positiondata.csv");
-            endpath = System.IO.Path.Combine(storagepath, "enddata.csv");
-            timepath = System.IO.Path.Combine(storagepath, "timedata.csv");
-            dkfpath = System.IO.Path.Combine(storagepath, "dkfdata.csv");
 
-            if (System.IO.File.Exists(linpath)) System.IO.File.Delete(linpath);
-            if (System.IO.File.Exists(lowaccpath)) System.IO.File.Delete(lowaccpath);
-            if (System.IO.File.Exists(velopath)) System.IO.File.Delete(velopath);
-            if (System.IO.File.Exists(positionpath)) System.IO.File.Delete(positionpath);
-            if (System.IO.File.Exists(endpath)) System.IO.File.Delete(endpath);
-            if (System.IO.File.Exists(timepath)) System.IO.File.Delete(timepath);
-            if (System.IO.File.Exists(dkfpath)) System.IO.File.Delete(dkfpath);
+            try
+            {
+                dkfpath = System.IO.Path.Combine(storagepath, "dkfdata.csv");
+                accloadpath = System.IO.Path.Combine(storagepath, "accdata.csv");
+                positionloadpath = System.IO.Path.Combine(storagepath, "positiondata.csv");
+                if (System.IO.File.Exists(dkfpath)) System.IO.File.Delete(dkfpath);
+            }
+            catch { }
 
-            dkf = new DiscreteKalmanFilter(x0, p0);
-        }
+            using (var reader = new StreamReader(accloadpath))
+            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+            {
+                accrec = csv.GetRecords<Records>().ToList();
+            }
 
-        private void acc_read(object sender, AccelerometerChangedEventArgs e)
-        {
-            acctime = DateTime.UtcNow;
-            label_Zeit.Text = acctime.ToString();
+            beaconrec.Add(new Records(0, 0, 0));
+            beaconrec.Add(new Records(0, 1, 0));
+            beaconrec.Add(new Records(0, 2, 0));
+            beaconrec.Add(new Records(0, 3, 0));
+
         }
 
         #region buttons
         private void Button_Clicked(object sender, EventArgs e)
         {
-            accservice = DependencyService.Resolve<IServiceACC>();
-            rotationservice = DependencyService.Resolve<IServiceRotation>();
-            rotationservice.Init();
-            accservice.Init();
-
-            Array.Clear(velocity, 0, velocity.Length);
-            Array.Clear(position, 0, position.Length);
-            Array.Clear(acceleration, 0, acceleration.Length);
-            Array.Clear(calibration, 0, calibration.Length);
-            linacctime[1] = DateTime.UtcNow;
-            label_onoff.Text = "ON";
-
-            rotationservice.ValuesChanged += save_rotation;
-            accservice.ValuesChanged += SaveLin;
+            label_onoff.Text = "Started";
+            beacontimer = new Timer(beaconcallback, null, 1000, 1000);
+            acctimer = new Timer(acccallback, null, 1000, 1000);
         }
 
-        private void save_rotation(object sender, EventArgs e)
+        private void acccallback(object x)
         {
-            RotationEventArgs args = e as RotationEventArgs;
-            SensorManager.GetRotationMatrixFromVector(rotationMatrix,args.values);
+            if (acccount <= accrec.Count)
+            { 
+                var vec = new Vector((float)accrec[acccount].X, (float)accrec[acccount].Y, (float)accrec[acccount].Z);
+                fusion.KalmanFusion(vec, ManagerTypes.IMU, new PositionUpdatedEventArgs(vec));
+                acctimer.Change((int)((accrec[acccount + 1].time - accrec[acccount].time) * 1000), 1000);
+                acccount++;
+            }
+            else acctimer.Dispose();
         }
 
-
+        private void beaconcallback(object x)
+        {
+            if (beaconcount <= beaconrec.Count)
+            {
+                var vec = new Vector((float)beaconrec[beaconcount].X, (float)beaconrec[beaconcount].Y, (float)beaconrec[beaconcount].Z);
+                fusion.KalmanFusion(vec, ManagerTypes.BEACON, new PositionUpdatedEventArgs(vec));
+                beaconcount++;
+            }
+            else beacontimer.Dispose();
+        }
         private void Button_Clicked2(object sender, EventArgs e)
         {
-            accservice.Stop();
             label_onoff.Text = "OFF";
-            rotationservice.ValuesChanged -= save_rotation;
-            accservice.ValuesChanged -= SaveLin;
         }
-
         private void Button_Clicked3(object sender, EventArgs e)
         {
             button_start.IsEnabled = false;
             label_cali.Text = "Calibration";
-            accservice = DependencyService.Resolve<IServiceACC>();
-            accservice.Init();
-            accservice.ValuesChanged += Calibrate;
-
             Device.StartTimer(TimeSpan.FromSeconds(5), () =>
             {
-                accservice.ValuesChanged -= Calibrate;
                 label_cali.Text = "Calibrated";
                 return false; // return true to repeat counting, false to stop timer
             });
@@ -143,141 +112,228 @@ namespace IMUTest
 
         #endregion buttons
 
-        #region linacc
-        private void SaveLin(object sender, EventArgs e)
+
+        public class SensorFusion
         {
-            AccEventArgs args = e as AccEventArgs;
-            AccVector vec = new AccVector(args.x, args.y, args.z);
-            linacctime[0] = linacctime[1];
-            linacctime[1] = DateTime.UtcNow;
-            linaccspan = linacctime[1] - linacctime[0];
-            System.IO.File.AppendAllText(timepath, linaccspan.TotalMilliseconds.ToString() + System.Environment.NewLine);
-
-            integration(vec);
-            System.IO.File.AppendAllText(linpath, vec.ToString(linacctime[1]) + System.Environment.NewLine);
-        }
-
-        private void Calibrate(object sender, EventArgs e)
-        {
-            AccEventArgs args = e as AccEventArgs;
-
-            calibration[1, 0] = 0.90 * calibration[0, 0] + 0.1 * args.x;
-            calibration[1, 1] = 0.90 * calibration[0, 1] + 0.1 * args.y;
-            calibration[1, 2] = 0.90 * calibration[0, 2] + 0.1 * args.z;
-
-            calibration[0, 0] = calibration[1, 0];
-            calibration[0, 1] = calibration[1, 1];
-            calibration[0, 2] = calibration[1, 1];
-        }
-
-        #endregion linacc
-
-        private void integration(AccVector vec)
-        {
-            acceleration[1, 0] = (0.5 * acceleration[0, 0]) + (0.5 * (vec.x - calibration[1, 0]));
-            acceleration[1, 1] = (0.5 * acceleration[0, 1]) + (0.5 * (vec.y - calibration[1, 1]));
-            acceleration[1, 2] = (0.5 * acceleration[0, 2]) + (0.5 * (vec.z - calibration[1, 2]));
-
-            AccVector accvector = new AccVector((float)acceleration[1, 0], (float)acceleration[1, 1], (float)acceleration[1, 2]);
-            System.IO.File.AppendAllText(lowaccpath, accvector.ToString(linacctime[1]) + System.Environment.NewLine);
-
-            acceleration[0, 0] = acceleration[1, 0];
-            acceleration[0, 1] = acceleration[1, 1]; 
-            acceleration[0, 2] = acceleration[1, 2];
-
-
-            /* roation transform */
-            for (int i = 0; i < 3; i++)
+            /// Einzige Instanz des SensorFusion, da dieser ein Singelton ist.
+            private static readonly SensorFusion _thisManager = new SensorFusion();
+            private enum SensorFusionState { Uninitzialized, Inizialized };
+            private SensorFusionState State
             {
-                double s = 0;
-                for (int j = 0; j < 3; j++)
-                {
-                    s += acceleration[1, j] * rotationMatrix[j + i * 3];
-                }
-                xyacceleration[1,i] = s;
+                get;
+                set;
             }
-            AccVector korregiertervector = new AccVector((float)xyacceleration[1, 0], (float)xyacceleration[1, 1], (float)xyacceleration[1, 2]);
-            System.IO.File.AppendAllText(endpath, korregiertervector.ToString(linacctime[1]) + System.Environment.NewLine);
 
+            #region Matrizen
+            private Matrix<double> x0 = Matrix<double>.Build.Dense(6, 1, new[] { 0d, 0d, 0d, 0d, 0d, 0d }); // State Representation: [ x y x' y' x'' y'']
+            private Matrix<double> p0 = Matrix<double>.Build.Dense(6, 6, new[] { 10d, 0d, 0d, 0d, 0d, 0d,  //Covariance of inital State (same as x0 with m x m) as we start at zero
+                                                                             0d, 10d, 0d, 0d, 0d, 0d,
+                                                                             0d, 0d, 10d, 0d, 0d, 0d,
+                                                                             0d, 0d, 0d, 10d, 0d, 0d,
+                                                                             0d, 0d, 0d, 0d, 10d, 0d,
+                                                                             0d, 0d, 0d, 0d, 0d, 10d});
 
-            Matrix<double> F = Matrix<double>.Build.Dense(6, 6, new[] { 1d, 0d, 1d, 0d, 0.5d, 0d,   // State Transition Matrix: [ 1 0 T 0 .5T^2   0
-                                                                        0d, 1d, 0d, 1d, 0d, 0.5d,   //                            0 1 0 T   0   .5T^2
-                                                                        0d, 0d, 1d, 0d, 1d, 0d,   //                            0 0 1 0   T     0
-                                                                        0d, 0d, 0d, 1d, 0d, 1d,   //                            0 0 0 1   0     T
-                                                                        0d, 0d, 0d, 0d, 1d, 0d,                        //                            0 0 0 0   1     0
-                                                                        0d, 0d, 0d, 0d, 0d, 1d});                      //                            0 0 0 0   0     1  ]
-            Matrix<double> G = Matrix<double>.Build.Dense(6, 2, new[] { 0.5d, 0d , //plant noise matrix
-                                                                        0d, 0.5d,
-                                                                        1d, 0d,
-                                                                        0d, 1d,
-                                                                        1d, 0d,
-                                                                        0d, 1d });
-            /*
-             * 
-            Matrix<double> F = Matrix<double>.Build.Dense(6, 6, new[] { 1d, 0d, linaccspan.TotalSeconds, 0d,  0.5 * linaccspan.TotalSeconds * linaccspan.TotalSeconds, 0d,   // State Transition Matrix: [ 1 0 T 0 .5T^2   0
-                                                                        0d, 1d, 0d, linaccspan.TotalSeconds, 0d, 0.5 * linaccspan.TotalSeconds * linaccspan.TotalSeconds,   //                            0 1 0 T   0   .5T^2
-                                                                        0d, 0d, 1d, 0d, linaccspan.TotalSeconds, 0d,   //                            0 0 1 0   T     0
-                                                                        0d, 0d, 0d, 1d, 0d, linaccspan.TotalSeconds,   //                            0 0 0 1   0     T
-                                                                        0d, 0d, 0d, 0d, 1d, 0d,                        //                            0 0 0 0   1     0
-                                                                        0d, 0d, 0d, 0d, 0d, 1d});                      //                            0 0 0 0   0     1  ]
-            Matrix<double> G = Matrix<double>.Build.Dense(6, 2, new[] { 0.5 * linaccspan.TotalSeconds * linaccspan.TotalSeconds, 0d , //plant noise matrix
-                                                                        0d, 0.5 * linaccspan.TotalSeconds * linaccspan.TotalSeconds,
-                                                                        linaccspan.TotalSeconds, 0d,
-                                                                        0d, linaccspan.TotalSeconds,
-                                                                        1d, 0d,
-                                                                        0d, 1d });
+            //used with Beacon Event
+            private Matrix<double> H_position = Matrix<double>.Build.Dense(2, 6, new[] { 1d, 0d, 0d, 0d, 0d, 0d,      // Measurement Model: [ 1 0 0 0 0 0
+                                                                                     0d, 1d, 0d, 0d, 0d, 0d });   //                      0 1 0 0 0 0 ]
+
+            private Matrix<double> R_position = Matrix<double>.Build.Dense(2, 4, new[] { 0.05d, 0d, 0d, 0d,           //covariance of measurments BEACON
+                                                                                     0d, 0.05d, 0d, 0d });
+
+            //used with IMU Event
+            private Matrix<double> H_acceleration = Matrix<double>.Build.Dense(2, 6, new[] { 0d, 0d, 0d, 0d, 1d, 0d,      // Measurement Model: [ 0 0 0 0 1 0
+                                                                                         0d, 0d, 0d, 0d, 0d, 1d });   //                      0 0 0 0 0 1 ]
+
+            private Matrix<double> R_acceleration = Matrix<double>.Build.Dense(2, 4, new[] { 0d, 0d, 0.05d, 0d,           //covariance of measurments IMU
+                                                                                         0d, 0d, 0d, 0.05d });
+            //commonly used 
+            private Matrix<double> Q = Matrix<double>.Build.Dense(6, 6, new[] { 0.025d, 0d, 0d, 0d, 0d, 0d,  //plant noise covariance
+                                                                            0d, 0.025d, 0d, 0d, 0d, 0d,
+                                                                            0d, 0d, 0.025d, 0d, 0d, 0d,
+                                                                            0d, 0d, 0d, 0.025d, 0d, 0d,
+                                                                            0d, 0d, 0d, 0d, 0.025d, 0d,
+                                                                            0d, 0d, 0d, 0d, 0d, 0.025d});
+
+            private Matrix<double> F = Matrix<double>.Build.Dense(6, 6); // State Transition Matrix: [ 1 0 T 0 .5T^2   0      example, later filled with time delta
+                                                                         //                            0 1 0 T   0   .5T^2
+                                                                         //                            0 0 1 0   T     0
+                                                                         //                            0 0 0 1   0     T
+                                                                         //                            0 0 0 0   1     0
+                                                                         //                            0 0 0 0   0     1  ]
+
+            /* needed?????
+            Matrix<double> G = Matrix<double>.Build.Dense(6, 4, new[] { 1d, 0d, 0d, 0d, //plant noise matrix
+                                                                        0d, 1d, 0d, 0d,
+                                                                        0d, 0d, 0d, 0d,
+                                                                        0d, 0d, 0d, 0d,
+                                                                        0d, 0d, 1d, 0d,
+                                                                        0d, 0d, 0d, 1d });
+
             */
-            //kalmann
-            dkf.Predict(F,G,Q);
+            private Matrix<double> z = Matrix<double>.Build.Dense(2, 1, new[] { 0d, 0d }); // Measurement: [x y]
+            #endregion Matrizen
 
-            Matrix<double> z = Matrix<double>.Build.Dense(2, 1, new[] { xyacceleration[1,0], xyacceleration[1,1] }); // Measurement: [x'' y'']
-            dkf.Update(z,H,R);
-            System.IO.File.AppendAllText(dkfpath, linacctime[1].ToString("ss.fff") + ';' + dkf.State[0,0].ToString() + ';' + dkf.State[1,0] + System.Environment.NewLine);
+            private DiscreteKalmanFilter dkf;
 
+            private DateTime[] imutimestamp = new DateTime[2];
+            private TimeSpan timespan;
 
-            if (!(xyacceleration[1, 0] > 0.05 || xyacceleration[1, 0] < -0.05)) xyacceleration[1, 0] = 0;
-            if (!(xyacceleration[1, 1] > 0.05 || xyacceleration[1, 1] < -0.05)) xyacceleration[1, 1] = 0;
-            if (!(xyacceleration[1, 2] > 0.05 || xyacceleration[1, 2] < -0.05)) xyacceleration[1, 2] = 0;
-
-            //end of movement
-            if ((Math.Abs(xyacceleration[1, 0]) <= 0.01) && (Math.Abs(xyacceleration[1, 1]) <= 0.01)) endcount++; //vergleich auf 0
-            if(endcount > 5)
+            private SensorFusion()
             {
-                endcount = 0;
-                //die von davor 0 damit die danach auch null sind
-                velocity[0, 0] = 0;
-                velocity[0, 1] = 0;
+                State = SensorFusionState.Uninitzialized;
+            }
+            public static SensorFusion GetSensorFusion()
+            {
+                return _thisManager;
             }
 
-            //integrate
-            velocity[1, 0] = velocity[0, 0] + (xyacceleration[0, 0] + (xyacceleration[1, 0] - xyacceleration[0, 0]) / 2) * linaccspan.TotalSeconds;
-            velocity[1, 1] = velocity[0, 1] + (xyacceleration[0, 1] + (xyacceleration[1, 1] - xyacceleration[0, 1]) / 2) * linaccspan.TotalSeconds;
-            //z-achse eigentlich latte
-            velocity[1, 2] = velocity[0, 2] + (xyacceleration[0, 2] + (xyacceleration[1, 2] - xyacceleration[0, 2]) / 2) * linaccspan.TotalSeconds;
+            public Vector KalmanFusion(Vector vec, ManagerTypes manager, IPhysEvent args)
+            {
+                if (State == SensorFusionState.Uninitzialized)
+                {
+                    if (manager == ManagerTypes.BEACON)
+                    {
+                        x0 = Matrix<double>.Build.Dense(6, 1, new[] { vec.X, vec.Y, 0d, 0d, 0d, 0d });
+                        dkf = new DiscreteKalmanFilter(x0, p0);
+                        State = SensorFusionState.Inizialized;
+                        imutimestamp[0] = DateTime.UtcNow;
+                        return Vector.NaN;
+                    }
+                    else return null; //kalman starts with first beacon event -> first location
+                }
 
-            AccVector velovector = new AccVector((float)velocity[1, 0], (float)velocity[1, 1], (float)velocity[1, 2]);
-            System.IO.File.AppendAllText(velopath, velovector.ToString(linacctime[1]) + System.Environment.NewLine);
+                if (manager == ManagerTypes.BEACON)
+                {
+                    z = Matrix<double>.Build.Dense(2, 1, new double[] { vec.X, vec.Y }); // Measurement: [x y]
+                    dkf.Update(z, H_position, R_position);
+                }
+                else
+                {
+                    //get time delta
+                    imutimestamp[1] = DateTime.UtcNow;
+                    timespan = (imutimestamp[1] - imutimestamp[0]);
+                    imutimestamp[0] = imutimestamp[1];
 
-            //integrate
-            position[1, 0] = position[0, 0] + (velocity[0, 0] + (velocity[1, 0] - velocity[0, 0]) / 2) * linaccspan.TotalSeconds;
-            position[1, 1] = position[0, 1] + (velocity[0, 1] + (velocity[1, 1] - velocity[0, 1]) / 2) * linaccspan.TotalSeconds;
-            position[1, 2] = position[0, 2] + (velocity[0, 2] + (velocity[1, 2] - velocity[0, 2]) / 2) * linaccspan.TotalSeconds;
+                    //fill state transition matrix
+                    F = Matrix<double>.Build.Dense(6, 6, new[] { 1d, 0d, timespan.TotalSeconds, 0d, 0.5 * System.Math.Pow(timespan.TotalSeconds,2), 0d,
+                                                             0d, 1d, 0d, timespan.TotalSeconds, 0d, 0.5 * System.Math.Pow(timespan.TotalSeconds,2),
+                                                             0d, 0d, 1d, 0d, timespan.TotalSeconds, 0d,
+                                                             0d, 0d, 0d, 1d, 0d, timespan.TotalSeconds,
+                                                             0d, 0d, 0d, 0d, 1d, 0d,
+                                                             0d, 0d, 0d, 0d, 0d, 1d});
 
-            AccVector posvector = new AccVector((float)position[1, 0], (float)position[1, 1], (float)position[1, 2]);
-            System.IO.File.AppendAllText(positionpath, posvector.ToString(linacctime[1]) + System.Environment.NewLine);
+                    dkf.Predict(F, Q); //predict state when IMU measurement given
 
-            xyacceleration[0, 0] = xyacceleration[1, 0];
-            xyacceleration[0, 1] = xyacceleration[1, 1];
-            xyacceleration[0, 2] = xyacceleration[1, 2];
+                    var acc = (args as PositionUpdatedEventArgs).accvec;
+                    z = Matrix<double>.Build.Dense(2, 1, new double[] { acc.X, acc.Y }); // Measurement: [x'' y'']
+                    dkf.Update(z, H_acceleration, R_acceleration);
+                }
 
-            velocity[0, 0] = velocity[1, 0];
-            velocity[0, 1] = velocity[1, 1];
-            velocity[0, 2] = velocity[1, 2];
-
-            position[0, 0] = position[1, 0];
-            position[0, 1] = position[1, 1];
-            position[0, 2] = position[1, 2];
+                var result = new Vector((float)dkf.State[0, 0], (float)dkf.State[0, 1], 0);
+                return result;
+            }
         }
 
+        public class Vector
+        {
+            private Vector3 _vec = new Vector3();
+
+            public float X
+            {
+                get { return _vec.X; }
+                set { _vec.X = value; }
+            }
+
+            public float Y
+            {
+                get { return _vec.Y; }
+                set { _vec.Y = value; }
+            }
+
+            public float Z
+            {
+                get { return _vec.Z; }
+                set { _vec.Z = value; }
+            }
+
+            public Vector(float x, float y, float z)
+            {
+                _vec = new Vector3(x, y, z);
+            }
+
+            public Vector(Vector3 vector)
+            {
+                _vec.X = vector.X;
+                _vec.Y = vector.Y;
+                _vec.Z = vector.Z;
+            }
+
+            public Vector(Vector vector)
+            {
+                _vec.X = vector.X;
+                _vec.Y = vector.Y;
+                _vec.Z = vector.Z;
+            }
+
+            public static Vector Zero
+            {
+                get { return new Vector(Vector3.Zero); }
+            }
+
+            public static Vector NaN
+            {
+                get { return new Vector(float.NaN, float.NaN, float.NaN); }
+            }
+
+            public static implicit operator Vector3(Vector vector) => new Vector3(vector.X, vector.Y, vector.Z);
+
+            public bool IsNaN()
+            {
+                return float.IsNaN(X) && float.IsNaN(Y) && float.IsNaN(Z);
+            }
+        }
+        public enum ManagerTypes
+        {
+            BEACON,
+            IMU
+        }
+
+        public class PositionUpdatedEventArgs : EventArgs, IPhysEvent
+        {
+            public Vector posvec;
+            public Vector accvec;
+
+            public PositionUpdatedEventArgs(double[] p, double[] a)
+            {
+                posvec = new Vector((float)p[0], (float)p[1], (float)p[2]);
+                accvec = new Vector((float)a[0], (float)a[1], (float)a[2]);
+            }
+
+            public PositionUpdatedEventArgs(Vector p)
+            {
+                accvec = p;
+            }
+        }
+
+        public interface IPhysEvent
+        {
+        }
+
+        public class Records
+        {
+            public double time { get; set; }
+            public double X { get; set; }
+            public double Y { get; set; }
+            public double Z { get; set; }
+
+
+            public Records(double parx, double pary, double parz)
+            {
+                X = parx;
+                Y = pary;
+                Z = parz;
+                time = 0;
+            }
+        }
     }
 }

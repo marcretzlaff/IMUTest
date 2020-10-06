@@ -18,12 +18,13 @@ using System.Numerics;
 using CsvHelper;
 using System.Globalization;
 using System.Threading;
+using Android.App;
 
 namespace IMUTest
 {
     public partial class MainPage : ContentPage
     {
-        private string dkfpath = null;
+        public static string dkfpath = null;
         private string accloadpath = null;
         private string positionloadpath = null;
         List<Records> accrec;
@@ -32,6 +33,8 @@ namespace IMUTest
         Timer beacontimer;
         int acccount = 0;
         int beaconcount = 0;
+
+        public static List<string> listresult = new List<string>();
 
 
         List<Records> beaconrec = new List<Records>();
@@ -45,7 +48,7 @@ namespace IMUTest
             try
             {
                 dkfpath = System.IO.Path.Combine(storagepath, "dkfdata.csv");
-                accloadpath = System.IO.Path.Combine(storagepath, "accdata.csv");
+                accloadpath = System.IO.Path.Combine(storagepath, "enddata.csv");
                 positionloadpath = System.IO.Path.Combine(storagepath, "positiondata.csv");
                 if (System.IO.File.Exists(dkfpath)) System.IO.File.Delete(dkfpath);
             }
@@ -54,13 +57,17 @@ namespace IMUTest
             using (var reader = new StreamReader(accloadpath))
             using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
             {
+                csv.Configuration.HasHeaderRecord = false;
+                csv.Configuration.Delimiter = ";";
                 accrec = csv.GetRecords<Records>().ToList();
             }
 
-            beaconrec.Add(new Records(0, 0, 0));
-            beaconrec.Add(new Records(0, 1, 0));
-            beaconrec.Add(new Records(0, 2, 0));
-            beaconrec.Add(new Records(0, 3, 0));
+            beaconrec.Add(new Records(0, 0, 0, 0));
+            beaconrec.Add(new Records(0, 0, 0, 0));
+            beaconrec.Add(new Records(0, 0.3, -0.2, 0));
+            beaconrec.Add(new Records(0, 0.8, -0.5, 0));
+            beaconrec.Add(new Records(0, 1.5, -1, 0));
+            beaconrec.Add(new Records(0, 1.3, -0.8, 0));
 
         }
 
@@ -68,35 +75,45 @@ namespace IMUTest
         private void Button_Clicked(object sender, EventArgs e)
         {
             label_onoff.Text = "Started";
-            beacontimer = new Timer(beaconcallback, null, 1000, 1000);
-            acctimer = new Timer(acccallback, null, 1000, 1000);
+            beacontimer = new Timer(beaconcallback, null, 900, 1000);
+            acctimer = new Timer(acccallback, null, 1000, 1200);
         }
 
         private void acccallback(object x)
         {
-            if (acccount <= accrec.Count)
-            { 
+            if (acccount < accrec.Count - 1)
+            {
                 var vec = new Vector((float)accrec[acccount].X, (float)accrec[acccount].Y, (float)accrec[acccount].Z);
                 fusion.KalmanFusion(vec, ManagerTypes.IMU, new PositionUpdatedEventArgs(vec));
-                acctimer.Change((int)((accrec[acccount + 1].time - accrec[acccount].time) * 1000), 1000);
+                int i = (int)((accrec[acccount + 1].time - accrec[acccount].time) * 1000);
+                acctimer.Change(i, 1000);
                 acccount++;
             }
-            else acctimer.Dispose();
+            else
+            {
+                acctimer.Dispose();
+            }
         }
 
         private void beaconcallback(object x)
         {
-            if (beaconcount <= beaconrec.Count)
+            if (beaconcount < beaconrec.Count)
             {
                 var vec = new Vector((float)beaconrec[beaconcount].X, (float)beaconrec[beaconcount].Y, (float)beaconrec[beaconcount].Z);
                 fusion.KalmanFusion(vec, ManagerTypes.BEACON, new PositionUpdatedEventArgs(vec));
                 beaconcount++;
             }
-            else beacontimer.Dispose();
+            else
+            {
+                beacontimer.Dispose();
+            }
         }
         private void Button_Clicked2(object sender, EventArgs e)
         {
             label_onoff.Text = "OFF";
+            foreach ( string x in listresult)
+            System.IO.File.AppendAllText(dkfpath, x);
+
         }
         private void Button_Clicked3(object sender, EventArgs e)
         {
@@ -109,7 +126,6 @@ namespace IMUTest
             });
             button_start.IsEnabled = true;
         }
-
         #endregion buttons
 
 
@@ -135,17 +151,17 @@ namespace IMUTest
 
             //used with Beacon Event
             private Matrix<double> H_position = Matrix<double>.Build.Dense(2, 6, new[] { 1d, 0d, 0d, 0d, 0d, 0d,      // Measurement Model: [ 1 0 0 0 0 0
-                                                                                     0d, 1d, 0d, 0d, 0d, 0d });   //                      0 1 0 0 0 0 ]
+                                                                                        0d, 1d, 0d, 0d, 0d, 0d });   //                      0 1 0 0 0 0 ]
 
-            private Matrix<double> R_position = Matrix<double>.Build.Dense(2, 4, new[] { 0.05d, 0d, 0d, 0d,           //covariance of measurments BEACON
-                                                                                     0d, 0.05d, 0d, 0d });
+            private Matrix<double> R_position = Matrix<double>.Build.Dense(2, 2, new[] { 0.05d, 0d,          //covariance of measurments BEACON
+                                                                                         0d, 0.05d });
 
             //used with IMU Event
             private Matrix<double> H_acceleration = Matrix<double>.Build.Dense(2, 6, new[] { 0d, 0d, 0d, 0d, 1d, 0d,      // Measurement Model: [ 0 0 0 0 1 0
-                                                                                         0d, 0d, 0d, 0d, 0d, 1d });   //                      0 0 0 0 0 1 ]
+                                                                                            0d, 0d, 0d, 0d, 0d, 1d });   //                      0 0 0 0 0 1 ]
 
-            private Matrix<double> R_acceleration = Matrix<double>.Build.Dense(2, 4, new[] { 0d, 0d, 0.05d, 0d,           //covariance of measurments IMU
-                                                                                         0d, 0d, 0d, 0.05d });
+            private Matrix<double> R_acceleration = Matrix<double>.Build.Dense(2, 2, new[] { 0.005d, 0d,           //covariance of measurments IMU
+                                                                                             0d, 0.005d });
             //commonly used 
             private Matrix<double> Q = Matrix<double>.Build.Dense(6, 6, new[] { 0.025d, 0d, 0d, 0d, 0d, 0d,  //plant noise covariance
                                                                             0d, 0.025d, 0d, 0d, 0d, 0d,
@@ -197,7 +213,8 @@ namespace IMUTest
                         dkf = new DiscreteKalmanFilter(x0, p0);
                         State = SensorFusionState.Inizialized;
                         imutimestamp[0] = DateTime.UtcNow;
-                        return Vector.NaN;
+                        listresult.Add('0' + ';' + dkf.State[0, 0].ToString() + ';' + dkf.State[1, 0] + System.Environment.NewLine);
+                        return vec;
                     }
                     else return null; //kalman starts with first beacon event -> first location
                 }
@@ -213,7 +230,6 @@ namespace IMUTest
                     imutimestamp[1] = DateTime.UtcNow;
                     timespan = (imutimestamp[1] - imutimestamp[0]);
                     imutimestamp[0] = imutimestamp[1];
-
                     //fill state transition matrix
                     F = Matrix<double>.Build.Dense(6, 6, new[] { 1d, 0d, timespan.TotalSeconds, 0d, 0.5 * System.Math.Pow(timespan.TotalSeconds,2), 0d,
                                                              0d, 1d, 0d, timespan.TotalSeconds, 0d, 0.5 * System.Math.Pow(timespan.TotalSeconds,2),
@@ -229,7 +245,8 @@ namespace IMUTest
                     dkf.Update(z, H_acceleration, R_acceleration);
                 }
 
-                var result = new Vector((float)dkf.State[0, 0], (float)dkf.State[0, 1], 0);
+                listresult.Add(timespan.TotalSeconds.ToString() + ';' + dkf.State[0, 0].ToString() + ';' + dkf.State[1, 0] + System.Environment.NewLine);
+                Vector result = new Vector((float)dkf.State[0, 0], (float)dkf.State[1, 0], 0);
                 return result;
             }
         }
@@ -327,12 +344,13 @@ namespace IMUTest
             public double Z { get; set; }
 
 
-            public Records(double parx, double pary, double parz)
+            public Records(double partime, double parx, double pary, double parz)
             {
+                time = partime;
                 X = parx;
                 Y = pary;
                 Z = parz;
-                time = 0;
+
             }
         }
     }

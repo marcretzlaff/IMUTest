@@ -151,7 +151,7 @@ namespace IMUTest
             linacctime[0] = linacctime[1];
             linacctime[1] = DateTime.UtcNow;
             linaccspan = linacctime[1] - linacctime[0];
-            System.IO.File.AppendAllText(timepath, linaccspan.ToString().Replace(',','.') + System.Environment.NewLine);
+            System.IO.File.AppendAllText(timepath, linaccspan.TotalSeconds.ToString().Replace(',','.') + System.Environment.NewLine);
 
             integration(vec);
             System.IO.File.AppendAllText(linpath, vec.ToString(linacctime[1]) + System.Environment.NewLine);

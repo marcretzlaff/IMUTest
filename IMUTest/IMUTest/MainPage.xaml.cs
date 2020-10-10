@@ -101,7 +101,6 @@ namespace IMUTest
             Array.Clear(velocity, 0, velocity.Length);
             Array.Clear(position, 0, position.Length);
             Array.Clear(acceleration, 0, acceleration.Length);
-            Array.Clear(calibration, 0, calibration.Length);
             linacctime[1] = DateTime.UtcNow;
             label_onoff.Text = "ON";
 

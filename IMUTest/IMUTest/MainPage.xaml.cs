@@ -213,7 +213,7 @@ namespace IMUTest
                         dkf = new DiscreteKalmanFilter(x0, p0);
                         State = SensorFusionState.Inizialized;
                         imutimestamp[0] = DateTime.UtcNow;
-                        listresult.Add('0' + ';' + dkf.State[0, 0].ToString() + ';' + dkf.State[1, 0] + System.Environment.NewLine);
+                        listresult.Add(manager.ToString() + ';' + "0.0" + ';' + dkf.State[0, 0].ToString().Replace(',', '.') + ';' + dkf.State[1, 0].ToString().Replace(',', '.') + System.Environment.NewLine);
                         return vec;
                     }
                     else return null; //kalman starts with first beacon event -> first location
@@ -245,7 +245,7 @@ namespace IMUTest
                     dkf.Update(z, H_acceleration, R_acceleration);
                 }
 
-                listresult.Add(timespan.TotalSeconds.ToString() + ';' + dkf.State[0, 0].ToString() + ';' + dkf.State[1, 0] + System.Environment.NewLine);
+                listresult.Add(manager.ToString() + ';' + timespan.TotalSeconds.ToString().Replace(',', '.') + ';' + dkf.State[0, 0].ToString().Replace(',', '.') + ';' + dkf.State[1, 0].ToString().Replace(',', '.') + System.Environment.NewLine);
                 Vector result = new Vector((float)dkf.State[0, 0], (float)dkf.State[1, 0], 0);
                 return result;
             }

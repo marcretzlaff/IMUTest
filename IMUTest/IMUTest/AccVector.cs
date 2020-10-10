@@ -29,5 +29,9 @@ namespace IMUTest
         {
             return time.ToString("ss.fff") + ";" + x.ToString().Replace(',','.') + ";" + y.ToString().Replace(',', '.') + ";" + z.ToString().Replace(',', '.');
         }
+        public override string ToString()
+        {
+            return x.ToString().Replace(',', '.') + ";" + y.ToString().Replace(',', '.') + ";" + z.ToString().Replace(',', '.');
+        }
     }
 }

@@ -24,12 +24,6 @@ namespace IMUTest
     public partial class MainPage : ContentPage
     {
         private IServiceACC accservice = null;
-        private IServiceRotation rotationservice = null;
-
-        private DateTime acctime;
-        private DateTime[] linacctime = new DateTime[2];
-        private TimeSpan linaccspan;
-        private float[] rotationMatrix = new float[9];
 
         private string linpath = null;
         private string positionpath = null;
@@ -41,6 +35,7 @@ namespace IMUTest
         double[,] position = new double[2, 3];
         double[,] calibration = new double[2, 3];
         private int endcount;
+        private int changed = 0;
 
         public static List<Records> listlinacc = new List<Records>();
         public static List<Double> listtimespan = new List<Double>();
@@ -77,21 +72,26 @@ namespace IMUTest
         #region buttons
         private void Button_Clicked(object sender, EventArgs e)
         {
-            int j = 1;
+            result.Clear();
+            Array.Clear(velocity, 0, velocity.Length);
+            Array.Clear(position, 0, position.Length);
+            Array.Clear(acceleration, 0, acceleration.Length);
+            AccVector resvec = null;
+            int j = 0;
             for (int i = 1; i < 100; i++)
             {
                 foreach (var x in listlinacc)
                 {
                     AccVector vec = new AccVector((float)x.X, (float)x.Y, (float)x.Z);
-                    var resvec = integration(i, vec, listtimespan[j++]);
-                    result.Add(i + ';' + resvec.ToString());
+                    resvec = integration(i, vec, listtimespan[j++]);
                 }
-                j = 1;
+                j = 0;
+                Array.Clear(velocity, 0, velocity.Length);
+                Array.Clear(position, 0, position.Length);
+                Array.Clear(acceleration, 0, acceleration.Length);
+                result.Add(i.ToString() + ';' + resvec.ToString()); 
             }
-            Array.Clear(velocity, 0, velocity.Length);
-            Array.Clear(position, 0, position.Length);
-            Array.Clear(acceleration, 0, acceleration.Length);
-            Array.Clear(calibration, 0, calibration.Length);
+
             label_onoff.Text = "ON";
         }
 
@@ -142,9 +142,9 @@ namespace IMUTest
 
         private AccVector integration(int percentage, AccVector vec, double linaccspan)
         {
-            acceleration[1, 0] = (((1 - percentage) / 100) * acceleration[0, 0]) + ((percentage / 100) * (vec.x - calibration[1, 0]));
-            acceleration[1, 1] = (((1 - percentage) / 100) * acceleration[0, 1]) + ((percentage / 100) * (vec.y - calibration[1, 1]));
-            acceleration[1, 2] = (((1 - percentage) / 100) * acceleration[0, 2]) + ((percentage / 100) * (vec.z - calibration[1, 2]));
+            acceleration[1, 0] = ((((double)(100 - percentage)) / 100) * acceleration[0, 0]) + (((double)percentage / 100) * (vec.x - calibration[1, 0]));
+            acceleration[1, 1] = ((((double)(100 - percentage)) / 100) * acceleration[0, 1]) + (((double)percentage / 100) * (vec.y - calibration[1, 1]));
+            acceleration[1, 2] = ((((double)(100 - percentage)) / 100) * acceleration[0, 2]) + (((double)percentage / 100) * (vec.z - calibration[1, 2]));
 
             acceleration[0, 0] = acceleration[1, 0];
             acceleration[0, 1] = acceleration[1, 1];
@@ -155,7 +155,16 @@ namespace IMUTest
             if (!(acceleration[1, 2] > 0.05 || acceleration[1, 2] < -0.05)) acceleration[1, 2] = 0;
 
             //end of movement
-            if ((Math.Abs(acceleration[1, 0]) <= 0.01) && (Math.Abs(acceleration[1, 1]) <= 0.01)) endcount++; //vergleich auf 0
+            if ((Math.Abs(acceleration[1, 0]) <= 0.01) && (Math.Abs(acceleration[1, 1]) <= 0.01))
+            {
+                if (changed == 0 && endcount != 0) //start endcount new if not in serial
+                    endcount = 0;
+                endcount++; 
+                changed = 1;
+                //endcount added 
+            }
+            else changed = 0; //no endcount added 
+
             if (endcount > 5)
             {
                 endcount = 0;
@@ -174,9 +183,6 @@ namespace IMUTest
             position[1, 0] = position[0, 0] + (velocity[0, 0] + (velocity[1, 0] - velocity[0, 0]) / 2) * linaccspan;
             position[1, 1] = position[0, 1] + (velocity[0, 1] + (velocity[1, 1] - velocity[0, 1]) / 2) * linaccspan;
             position[1, 2] = position[0, 2] + (velocity[0, 2] + (velocity[1, 2] - velocity[0, 2]) / 2) * linaccspan;
-
-            AccVector posvector = new AccVector((float)position[1, 0], (float)position[1, 1], (float)position[1, 2]);
-            System.IO.File.AppendAllText(positionpath, posvector.ToString(linacctime[1]) + System.Environment.NewLine);
 
             velocity[0, 0] = velocity[1, 0];
             velocity[0, 1] = velocity[1, 1];

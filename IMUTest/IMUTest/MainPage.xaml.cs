@@ -77,14 +77,16 @@ namespace IMUTest
         #region buttons
         private void Button_Clicked(object sender, EventArgs e)
         {
+            int j = 1;
             for (int i = 1; i < 100; i++)
             {
                 foreach (var x in listlinacc)
                 {
                     AccVector vec = new AccVector((float)x.X, (float)x.Y, (float)x.Z);
-                    var resvec = integration(i, vec, listtimespan[i]); ;
-                    result.Add(resvec.ToString());
+                    var resvec = integration(i, vec, listtimespan[j++]);
+                    result.Add(i + ';' + resvec.ToString());
                 }
+                j = 1;
             }
             Array.Clear(velocity, 0, velocity.Length);
             Array.Clear(position, 0, position.Length);

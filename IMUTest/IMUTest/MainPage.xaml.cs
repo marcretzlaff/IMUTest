@@ -89,7 +89,7 @@ namespace IMUTest
                 Array.Clear(velocity, 0, velocity.Length);
                 Array.Clear(position, 0, position.Length);
                 Array.Clear(acceleration, 0, acceleration.Length);
-                result.Add(i.ToString() + ';' + resvec.ToString()); 
+                result.Add(i.ToString() + ';' + resvec.ToString() + System.Environment.NewLine); 
             }
 
             label_onoff.Text = "ON";

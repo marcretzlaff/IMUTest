@@ -18,6 +18,7 @@ using Android.Hardware;
 using CsvHelper;
 using System.Globalization;
 using MathNet.Numerics;
+using System.Numerics;
 
 namespace IMUTest
 {
@@ -40,6 +41,9 @@ namespace IMUTest
         public static List<Records> listlinacc = new List<Records>();
         public static List<Double> listtimespan = new List<Double>();
         public static List<String> result = new List<String>();
+
+        private const double DegreeToRadian = System.Math.PI / 180;
+        public double? requiredRotationInDegrees = null;
 
         public MainPage()
         {
@@ -174,6 +178,13 @@ namespace IMUTest
                 velocity[0, 2] = 0;
             }
 
+            //rotate X,Y acceleration from world frame to map frame if required
+            if (requiredRotationInDegrees != null)
+            {
+                Vector2 mapframe = rotateAccelerationVectors((double)requiredRotationInDegrees, new Vector2((float)acceleration[1, 0], (float)acceleration[1, 1]));
+                acceleration[1, 0] = mapframe.X;
+                acceleration[1, 1] = mapframe.Y;
+            }
             //integrate
             velocity[1, 0] = velocity[0, 0] + (xyacceleration[0, 0] + (acceleration[1, 0] - acceleration[0, 0]) / 2) * linaccspan;
             velocity[1, 1] = velocity[0, 1] + (xyacceleration[0, 1] + (acceleration[1, 1] - acceleration[0, 1]) / 2) * linaccspan;
@@ -193,6 +204,13 @@ namespace IMUTest
             position[0, 2] = position[1, 2];
 
             return new AccVector((float)position[1, 0], (float)position[1,1],(float)position[1,2]);
+        }
+
+        private Vector2 rotateAccelerationVectors(double degrees, Vector2 vec)
+        {
+            var ca = System.Math.Cos(degrees * DegreeToRadian);
+            var sa = System.Math.Sin(degrees * DegreeToRadian);
+            return new Vector2((float)(ca * vec.X - sa * vec.Y), (float)(sa * vec.X + ca * vec.Y));
         }
 
         public class Records

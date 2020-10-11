@@ -186,9 +186,9 @@ namespace IMUTest
                 acceleration[1, 1] = mapframe.Y;
             }
             //integrate
-            velocity[1, 0] = velocity[0, 0] + (xyacceleration[0, 0] + (acceleration[1, 0] - acceleration[0, 0]) / 2) * linaccspan;
-            velocity[1, 1] = velocity[0, 1] + (xyacceleration[0, 1] + (acceleration[1, 1] - acceleration[0, 1]) / 2) * linaccspan;
-            velocity[1, 2] = velocity[0, 2] + (xyacceleration[0, 2] + (acceleration[1, 2] - acceleration[0, 2]) / 2) * linaccspan;
+            velocity[1, 0] = velocity[0, 0] + (acceleration[0, 0] + (acceleration[1, 0] - acceleration[0, 0]) / 2) * linaccspan;
+            velocity[1, 1] = velocity[0, 1] + (acceleration[0, 1] + (acceleration[1, 1] - acceleration[0, 1]) / 2) * linaccspan;
+            velocity[1, 2] = velocity[0, 2] + (acceleration[0, 2] + (acceleration[1, 2] - acceleration[0, 2]) / 2) * linaccspan;
 
             //integrate
             position[1, 0] = position[0, 0] + (velocity[0, 0] + (velocity[1, 0] - velocity[0, 0]) / 2) * linaccspan;

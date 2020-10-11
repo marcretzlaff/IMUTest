@@ -22,26 +22,19 @@ namespace IMUTest
     public partial class MainPage : ContentPage
     {
         private IServiceACC accservice = null;
-        private IServiceRotation rotationservice = null;
-
         private DateTime acctime;
         private DateTime[] linacctime = new DateTime[2];
         private TimeSpan linaccspan;
-        private float[] rotationMatrix = new float[9];
         private int changed = 0;
         private const double DegreeToRadian = System.Math.PI / 180;
         public double? requiredRotationInDegrees = null;
 
         private string linpath = null;
         private string lowaccpath = null;
-        private string velopath = null;
         private string positionpath = null;
-        private string endpath = null;
         private string timepath = null;
-        private string dkfpath = null;
 
         double[,] acceleration = new double[2, 3];
-        double[,] xyacceleration = new double[2, 3];
         double[,] velocity = new double[2, 3];
         double[,] position = new double[2, 3];
         double[,] calibration = new double[2, 3];
@@ -56,20 +49,12 @@ namespace IMUTest
 
             var storagepath = DependencyService.Resolve<IFileSystem>().GetExternalStorage();
             linpath = System.IO.Path.Combine(storagepath, "lindata.csv");
-            lowaccpath = System.IO.Path.Combine(storagepath, "lowaccdata.csv");
-            velopath = System.IO.Path.Combine(storagepath, "velodata.csv");
             positionpath = System.IO.Path.Combine(storagepath, "positiondata.csv");
-            endpath = System.IO.Path.Combine(storagepath, "enddata.csv");
             timepath = System.IO.Path.Combine(storagepath, "timedata.csv");
-            dkfpath = System.IO.Path.Combine(storagepath, "dkfdata.csv");
 
             if (System.IO.File.Exists(linpath)) System.IO.File.Delete(linpath);
-            if (System.IO.File.Exists(lowaccpath)) System.IO.File.Delete(lowaccpath);
-            if (System.IO.File.Exists(velopath)) System.IO.File.Delete(velopath);
             if (System.IO.File.Exists(positionpath)) System.IO.File.Delete(positionpath);
-            if (System.IO.File.Exists(endpath)) System.IO.File.Delete(endpath);
             if (System.IO.File.Exists(timepath)) System.IO.File.Delete(timepath);
-            if (System.IO.File.Exists(dkfpath)) System.IO.File.Delete(dkfpath);
         }
 
         private void acc_read(object sender, AccelerometerChangedEventArgs e)
@@ -82,8 +67,6 @@ namespace IMUTest
         private void Button_Clicked(object sender, EventArgs e)
         {
             accservice = DependencyService.Resolve<IServiceACC>();
-            rotationservice = DependencyService.Resolve<IServiceRotation>();
-            rotationservice.Init();
             accservice.Init();
 
             Array.Clear(velocity, 0, velocity.Length);
@@ -91,23 +74,13 @@ namespace IMUTest
             Array.Clear(acceleration, 0, acceleration.Length);
             linacctime[1] = DateTime.UtcNow;
             label_onoff.Text = "ON";
-
-            rotationservice.ValuesChanged += save_rotation;
             accservice.ValuesChanged += SaveLin;
         }
-
-        private void save_rotation(object sender, EventArgs e)
-        {
-            RotationEventArgs args = e as RotationEventArgs;
-            SensorManager.GetRotationMatrixFromVector(rotationMatrix,args.values);
-        }
-
 
         private void Button_Clicked2(object sender, EventArgs e)
         {
             accservice.Stop();
             label_onoff.Text = "OFF";
-            rotationservice.ValuesChanged -= save_rotation;
             accservice.ValuesChanged -= SaveLin;
         }
 
@@ -165,30 +138,13 @@ namespace IMUTest
             acceleration[1, 1] = (0.5 * acceleration[0, 1]) + (0.5 * (vec.y - calibration[1, 1]));
             acceleration[1, 2] = (0.5 * acceleration[0, 2]) + (0.5 * (vec.z - calibration[1, 2]));
 
-            AccVector accvector = new AccVector((float)acceleration[1, 0], (float)acceleration[1, 1], (float)acceleration[1, 2]);
-            System.IO.File.AppendAllText(lowaccpath, accvector.ToString(linacctime[1]) + System.Environment.NewLine);
-
             acceleration[0, 0] = acceleration[1, 0];
             acceleration[0, 1] = acceleration[1, 1]; 
             acceleration[0, 2] = acceleration[1, 2];
 
-
-            /* roation transform */
-            for (int i = 0; i < 3; i++)
-            {
-                double s = 0;
-                for (int j = 0; j < 3; j++)
-                {
-                    s += acceleration[1, j] * rotationMatrix[j + i * 3];
-                }
-                xyacceleration[1,i] = s;
-            }
-            AccVector korregiertervector = new AccVector((float)xyacceleration[1, 0], (float)xyacceleration[1, 1], (float)xyacceleration[1, 2]);
-            System.IO.File.AppendAllText(endpath, korregiertervector.ToString(linacctime[1]) + System.Environment.NewLine);
-
-            if (!(xyacceleration[1, 0] > 0.05 || xyacceleration[1, 0] < -0.05)) xyacceleration[1, 0] = 0;
-            if (!(xyacceleration[1, 1] > 0.05 || xyacceleration[1, 1] < -0.05)) xyacceleration[1, 1] = 0;
-            if (!(xyacceleration[1, 2] > 0.05 || xyacceleration[1, 2] < -0.05)) xyacceleration[1, 2] = 0;
+            if (!(acceleration[1, 0] > 0.05 || acceleration[1, 0] < -0.05)) acceleration[1, 0] = 0;
+            if (!(acceleration[1, 1] > 0.05 || acceleration[1, 1] < -0.05)) acceleration[1, 1] = 0;
+            if (!(acceleration[1, 2] > 0.05 || acceleration[1, 2] < -0.05)) acceleration[1, 2] = 0;
 
             //end of movement
             if ((Math.Abs(acceleration[1, 0]) <= 0.01) && (Math.Abs(acceleration[1, 1]) <= 0.01))
@@ -212,18 +168,15 @@ namespace IMUTest
             //rotate X,Y acceleration from world frame to map frame if required
             if (requiredRotationInDegrees != null)
             {
-                var res = rotateAccelerationVectors((double)requiredRotationInDegrees, new Vector2((float)xyacceleration[1, 0], (float)xyacceleration[1, 1]));
-                xyacceleration[1, 0] = res.X;
-                xyacceleration[1, 1] = res.Y;
+                var res = rotateAccelerationVectors((double)requiredRotationInDegrees, new Vector2((float)acceleration[1, 0], (float)acceleration[1, 1]));
+                acceleration[1, 0] = res.X;
+                acceleration[1, 1] = res.Y;
             }
 
             //integrate
-            velocity[1, 0] = velocity[0, 0] + (xyacceleration[0, 0] + (xyacceleration[1, 0] - xyacceleration[0, 0]) / 2) * linaccspan.TotalSeconds;
-            velocity[1, 1] = velocity[0, 1] + (xyacceleration[0, 1] + (xyacceleration[1, 1] - xyacceleration[0, 1]) / 2) * linaccspan.TotalSeconds;
-            velocity[1, 2] = velocity[0, 2] + (xyacceleration[0, 2] + (xyacceleration[1, 2] - xyacceleration[0, 2]) / 2) * linaccspan.TotalSeconds;
-
-            AccVector velovector = new AccVector((float)velocity[1, 0], (float)velocity[1, 1], (float)velocity[1, 2]);
-            System.IO.File.AppendAllText(velopath, velovector.ToString(linacctime[1]) + System.Environment.NewLine);
+            velocity[1, 0] = velocity[0, 0] + (acceleration[0, 0] + (acceleration[1, 0] - acceleration[0, 0]) / 2) * linaccspan.TotalSeconds;
+            velocity[1, 1] = velocity[0, 1] + (acceleration[0, 1] + (acceleration[1, 1] - acceleration[0, 1]) / 2) * linaccspan.TotalSeconds;
+            velocity[1, 2] = velocity[0, 2] + (acceleration[0, 2] + (acceleration[1, 2] - acceleration[0, 2]) / 2) * linaccspan.TotalSeconds;
 
             //integrate
             position[1, 0] = position[0, 0] + (velocity[0, 0] + (velocity[1, 0] - velocity[0, 0]) / 2) * linaccspan.TotalSeconds;
@@ -232,10 +185,6 @@ namespace IMUTest
 
             AccVector posvector = new AccVector((float)position[1, 0], (float)position[1, 1], (float)position[1, 2]);
             System.IO.File.AppendAllText(positionpath, posvector.ToString(linacctime[1]) + System.Environment.NewLine);
-
-            xyacceleration[0, 0] = xyacceleration[1, 0];
-            xyacceleration[0, 1] = xyacceleration[1, 1];
-            xyacceleration[0, 2] = xyacceleration[1, 2];
 
             velocity[0, 0] = velocity[1, 0];
             velocity[0, 1] = velocity[1, 1];

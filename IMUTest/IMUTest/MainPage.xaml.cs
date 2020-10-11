@@ -15,6 +15,7 @@ using MathNet.Filtering.Kalman;
 using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
 using Android.Hardware;
+using System.Numerics;
 
 namespace IMUTest
 {
@@ -27,6 +28,9 @@ namespace IMUTest
         private DateTime[] linacctime = new DateTime[2];
         private TimeSpan linaccspan;
         private float[] rotationMatrix = new float[9];
+        private int changed = 0;
+        private const double DegreeToRadian = System.Math.PI / 180;
+        public double? requiredRotationInDegrees = null;
 
         private string linpath = null;
         private string lowaccpath = null;
@@ -42,20 +46,6 @@ namespace IMUTest
         double[,] position = new double[2, 3];
         double[,] calibration = new double[2, 3];
         private int endcount;
-
-        Matrix<double> x0 = Matrix<double>.Build.Dense(6, 1, new[] { 0d, 0d, 0d, 0d, 0d, 0d }); // State Representation: [ x y x' y' x'' y'']
-        Matrix<double> p0 = Matrix<double>.Build.Dense(6, 6); //Covariance of inital State (same as x0 with m x m) as we start at zero
-        Matrix<double> H = Matrix<double>.Build.Dense(2, 6, new[] { 0d, 0d, 0d, 0d, 1d, 0d,   // Measurement Model: [ 0 0 0 0 1 0
-                                                                    0d, 0d, 0d, 0d, 0d, 1d}); //                      0 0 0 0 0 1 ]
-
-        Matrix<double> R = Matrix<double>.Build.Dense(2, 2, new[] { 0.05d, 0d , 
-                                                                    0d, 0.05d});
-
-        Matrix<double> Q = Matrix<double>.Build.Dense(2, 2, new[] { 0.025d, 0d ,   //plant noise covariance
-                                                                    0d, 0.025d});
-
-
-        DiscreteKalmanFilter dkf = null;
 
         public MainPage()
         {
@@ -80,8 +70,6 @@ namespace IMUTest
             if (System.IO.File.Exists(endpath)) System.IO.File.Delete(endpath);
             if (System.IO.File.Exists(timepath)) System.IO.File.Delete(timepath);
             if (System.IO.File.Exists(dkfpath)) System.IO.File.Delete(dkfpath);
-
-            dkf = new DiscreteKalmanFilter(x0, p0);
         }
 
         private void acc_read(object sender, AccelerometerChangedEventArgs e)
@@ -198,60 +186,40 @@ namespace IMUTest
             AccVector korregiertervector = new AccVector((float)xyacceleration[1, 0], (float)xyacceleration[1, 1], (float)xyacceleration[1, 2]);
             System.IO.File.AppendAllText(endpath, korregiertervector.ToString(linacctime[1]) + System.Environment.NewLine);
 
-
-            Matrix<double> F = Matrix<double>.Build.Dense(6, 6, new[] { 1d, 0d, 1d, 0d, 0.5d, 0d,   // State Transition Matrix: [ 1 0 T 0 .5T^2   0
-                                                                        0d, 1d, 0d, 1d, 0d, 0.5d,   //                            0 1 0 T   0   .5T^2
-                                                                        0d, 0d, 1d, 0d, 1d, 0d,   //                            0 0 1 0   T     0
-                                                                        0d, 0d, 0d, 1d, 0d, 1d,   //                            0 0 0 1   0     T
-                                                                        0d, 0d, 0d, 0d, 1d, 0d,                        //                            0 0 0 0   1     0
-                                                                        0d, 0d, 0d, 0d, 0d, 1d});                      //                            0 0 0 0   0     1  ]
-            Matrix<double> G = Matrix<double>.Build.Dense(6, 2, new[] { 0.5d, 0d , //plant noise matrix
-                                                                        0d, 0.5d,
-                                                                        1d, 0d,
-                                                                        0d, 1d,
-                                                                        1d, 0d,
-                                                                        0d, 1d });
-            /*
-             * 
-            Matrix<double> F = Matrix<double>.Build.Dense(6, 6, new[] { 1d, 0d, linaccspan.TotalSeconds, 0d,  0.5 * linaccspan.TotalSeconds * linaccspan.TotalSeconds, 0d,   // State Transition Matrix: [ 1 0 T 0 .5T^2   0
-                                                                        0d, 1d, 0d, linaccspan.TotalSeconds, 0d, 0.5 * linaccspan.TotalSeconds * linaccspan.TotalSeconds,   //                            0 1 0 T   0   .5T^2
-                                                                        0d, 0d, 1d, 0d, linaccspan.TotalSeconds, 0d,   //                            0 0 1 0   T     0
-                                                                        0d, 0d, 0d, 1d, 0d, linaccspan.TotalSeconds,   //                            0 0 0 1   0     T
-                                                                        0d, 0d, 0d, 0d, 1d, 0d,                        //                            0 0 0 0   1     0
-                                                                        0d, 0d, 0d, 0d, 0d, 1d});                      //                            0 0 0 0   0     1  ]
-            Matrix<double> G = Matrix<double>.Build.Dense(6, 2, new[] { 0.5 * linaccspan.TotalSeconds * linaccspan.TotalSeconds, 0d , //plant noise matrix
-                                                                        0d, 0.5 * linaccspan.TotalSeconds * linaccspan.TotalSeconds,
-                                                                        linaccspan.TotalSeconds, 0d,
-                                                                        0d, linaccspan.TotalSeconds,
-                                                                        1d, 0d,
-                                                                        0d, 1d });
-            */
-            //kalmann
-            dkf.Predict(F,G,Q);
-
-            Matrix<double> z = Matrix<double>.Build.Dense(2, 1, new[] { xyacceleration[1,0], xyacceleration[1,1] }); // Measurement: [x'' y'']
-            dkf.Update(z,H,R);
-            System.IO.File.AppendAllText(dkfpath, linacctime[1].ToString("ss.fff") + ';' + dkf.State[0,0].ToString() + ';' + dkf.State[1,0] + System.Environment.NewLine);
-
-
             if (!(xyacceleration[1, 0] > 0.05 || xyacceleration[1, 0] < -0.05)) xyacceleration[1, 0] = 0;
             if (!(xyacceleration[1, 1] > 0.05 || xyacceleration[1, 1] < -0.05)) xyacceleration[1, 1] = 0;
             if (!(xyacceleration[1, 2] > 0.05 || xyacceleration[1, 2] < -0.05)) xyacceleration[1, 2] = 0;
 
             //end of movement
-            if ((Math.Abs(xyacceleration[1, 0]) <= 0.01) && (Math.Abs(xyacceleration[1, 1]) <= 0.01)) endcount++; //vergleich auf 0
-            if(endcount > 5)
+            if ((Math.Abs(acceleration[1, 0]) <= 0.01) && (Math.Abs(acceleration[1, 1]) <= 0.01))
+            {
+                if (changed == 0 && endcount != 0) //start endcount new if not in serial
+                    endcount = 0;
+                endcount++;
+                changed = 1;
+                //endcount added 
+            }
+            else changed = 0; //no endcount added 
+            if (endcount > 5)
             {
                 endcount = 0;
                 //die von davor 0 damit die danach auch null sind
                 velocity[0, 0] = 0;
                 velocity[0, 1] = 0;
+                velocity[0, 2] = 0;
+            }
+
+            //rotate X,Y acceleration from world frame to map frame if required
+            if (requiredRotationInDegrees != null)
+            {
+                var res = rotateAccelerationVectors((double)requiredRotationInDegrees, new Vector2((float)xyacceleration[1, 0], (float)xyacceleration[1, 1]));
+                xyacceleration[1, 0] = res.X;
+                xyacceleration[1, 1] = res.Y;
             }
 
             //integrate
             velocity[1, 0] = velocity[0, 0] + (xyacceleration[0, 0] + (xyacceleration[1, 0] - xyacceleration[0, 0]) / 2) * linaccspan.TotalSeconds;
             velocity[1, 1] = velocity[0, 1] + (xyacceleration[0, 1] + (xyacceleration[1, 1] - xyacceleration[0, 1]) / 2) * linaccspan.TotalSeconds;
-            //z-achse eigentlich latte
             velocity[1, 2] = velocity[0, 2] + (xyacceleration[0, 2] + (xyacceleration[1, 2] - xyacceleration[0, 2]) / 2) * linaccspan.TotalSeconds;
 
             AccVector velovector = new AccVector((float)velocity[1, 0], (float)velocity[1, 1], (float)velocity[1, 2]);
@@ -276,6 +244,13 @@ namespace IMUTest
             position[0, 0] = position[1, 0];
             position[0, 1] = position[1, 1];
             position[0, 2] = position[1, 2];
+        }
+
+        private Vector2 rotateAccelerationVectors(double degrees, Vector2 vec)
+        {
+            var ca = System.Math.Cos(degrees * DegreeToRadian);
+            var sa = System.Math.Sin(degrees * DegreeToRadian);
+            return new Vector2((float)(ca * vec.X - sa * vec.Y), (float)(sa * vec.X + ca * vec.Y));
         }
 
     }

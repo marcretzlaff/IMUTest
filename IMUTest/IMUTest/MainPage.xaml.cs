@@ -26,13 +26,10 @@ namespace IMUTest
     {
         public static string dkfpath = null;
         private string accloadpath = null;
-        private string positionloadpath = null;
-        private string timepath = null;
         List<Records> inputrecords;
         SensorFusion fusion = null;
 
         public static List<string> listresult = new List<string>();
-        public static List<Double> listtimespan = new List<Double>();
 
         public MainPage()
         {
@@ -41,7 +38,6 @@ namespace IMUTest
             var storagepath = DependencyService.Resolve<IFileSystem>().GetExternalStorage();
             dkfpath = System.IO.Path.Combine(storagepath, "dkfdata.csv");
             accloadpath = System.IO.Path.Combine(storagepath, "enddata.csv");
-            timepath = System.IO.Path.Combine(storagepath, "timedata.csv");
 
             if (System.IO.File.Exists(dkfpath)) System.IO.File.Delete(dkfpath);
 
@@ -52,21 +48,12 @@ namespace IMUTest
                 csv.Configuration.Delimiter = ";";
                 inputrecords = csv.GetRecords<Records>().ToList();
             }
-
-            using (var reader = new StreamReader(timepath))
-            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
-            {
-                csv.Configuration.HasHeaderRecord = false;
-                csv.Configuration.Delimiter = ";";
-                listtimespan = csv.GetRecords<Double>().ToList();
-            }
         }
 
         #region buttons
         private void Button_Clicked(object sender, EventArgs e)
         {
             label_onoff.Text = "Started";
-            int i = 0;
             foreach(var row in inputrecords)
             {
                 if(row.type == "Beacon")
@@ -77,14 +64,7 @@ namespace IMUTest
                 else
                 {
                     var vec = new Vector((float)row.X, (float)row.Y,(float) row.Z);
-                    try
-                    {
-                        fusion.KalmanFusion(vec, ManagerTypes.IMU, new PositionUpdatedEventArgs(vec), TimeSpan.FromSeconds(listtimespan[i++]));
-                    }
-                    catch(Exception ex)
-                    {
-                        return;
-                    }
+                    fusion.KalmanFusion(vec, ManagerTypes.IMU, new PositionUpdatedEventArgs(vec), TimeSpan.FromSeconds(row.span));
                 }
             }
         }
@@ -225,11 +205,6 @@ namespace IMUTest
                 Vector result = new Vector((float)dkf.State[0, 0], (float)dkf.State[1, 0], 0);
                 return result;
             }
-
-            internal void KalmanFusion(Vector vec, ManagerTypes iMU, PositionUpdatedEventArgs positionUpdatedEventArgs, double v)
-            {
-                throw new NotImplementedException();
-            }
         }
 
         public class Vector
@@ -320,15 +295,17 @@ namespace IMUTest
         public class Records
         {
             public string type { get; set; }
+            public double span { get; set; }
             public double time { get; set; }
             public double X { get; set; }
             public double Y { get; set; }
             public double Z { get; set; }
 
 
-            public Records(string partype, double partime, double parx, double pary, double parz)
+            public Records(string partype, double parspan,double partime, double parx, double pary, double parz)
             {
                 type = partype;
+                span = parspan;
                 time = partime;
                 X = parx;
                 Y = pary;

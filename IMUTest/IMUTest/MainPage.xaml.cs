@@ -27,87 +27,68 @@ namespace IMUTest
         public static string dkfpath = null;
         private string accloadpath = null;
         private string positionloadpath = null;
-        List<Records> accrec;
+        private string timepath = null;
+        List<Records> inputrecords;
         SensorFusion fusion = null;
-        Timer acctimer;
-        Timer beacontimer;
-        int acccount = 0;
-        int beaconcount = 0;
 
         public static List<string> listresult = new List<string>();
-
-
-        List<Records> beaconrec = new List<Records>();
+        public static List<Double> listtimespan = new List<Double>();
 
         public MainPage()
         {
             InitializeComponent();
             fusion = SensorFusion.GetSensorFusion();
             var storagepath = DependencyService.Resolve<IFileSystem>().GetExternalStorage();
+            dkfpath = System.IO.Path.Combine(storagepath, "dkfdata.csv");
+            accloadpath = System.IO.Path.Combine(storagepath, "enddata.csv");
+            timepath = System.IO.Path.Combine(storagepath, "timedata.csv");
 
-            try
-            {
-                dkfpath = System.IO.Path.Combine(storagepath, "dkfdata.csv");
-                accloadpath = System.IO.Path.Combine(storagepath, "enddata.csv");
-                positionloadpath = System.IO.Path.Combine(storagepath, "positiondata.csv");
-                if (System.IO.File.Exists(dkfpath)) System.IO.File.Delete(dkfpath);
-            }
-            catch { }
+            if (System.IO.File.Exists(dkfpath)) System.IO.File.Delete(dkfpath);
 
             using (var reader = new StreamReader(accloadpath))
             using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
             {
                 csv.Configuration.HasHeaderRecord = false;
                 csv.Configuration.Delimiter = ";";
-                accrec = csv.GetRecords<Records>().ToList();
+                inputrecords = csv.GetRecords<Records>().ToList();
             }
 
-            beaconrec.Add(new Records(0, 0, 0, 0));
-            beaconrec.Add(new Records(0, 0, 0, 0));
-            beaconrec.Add(new Records(0, 0.3, -0.2, 0));
-            beaconrec.Add(new Records(0, 0.8, -0.5, 0));
-            beaconrec.Add(new Records(0, 1.5, -1, 0));
-            beaconrec.Add(new Records(0, 1.3, -0.8, 0));
-
+            using (var reader = new StreamReader(timepath))
+            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+            {
+                csv.Configuration.HasHeaderRecord = false;
+                csv.Configuration.Delimiter = ";";
+                listtimespan = csv.GetRecords<Double>().ToList();
+            }
         }
 
         #region buttons
         private void Button_Clicked(object sender, EventArgs e)
         {
             label_onoff.Text = "Started";
-            beacontimer = new Timer(beaconcallback, null, 900, 1000);
-            acctimer = new Timer(acccallback, null, 1000, 1200);
+            int i = 0;
+            foreach(var row in inputrecords)
+            {
+                if(row.type == "Beacon")
+                {
+                    var vec = new Vector((float)row.X, (float)row.Y, (float)row.Z);
+                    fusion.KalmanFusion(vec, ManagerTypes.BEACON, new PositionUpdatedEventArgs(vec), new TimeSpan());
+                }
+                else
+                {
+                    var vec = new Vector((float)row.X, (float)row.Y,(float) row.Z);
+                    try
+                    {
+                        fusion.KalmanFusion(vec, ManagerTypes.IMU, new PositionUpdatedEventArgs(vec), TimeSpan.FromSeconds(listtimespan[i++]));
+                    }
+                    catch(Exception ex)
+                    {
+                        return;
+                    }
+                }
+            }
         }
 
-        private void acccallback(object x)
-        {
-            if (acccount < accrec.Count - 1)
-            {
-                var vec = new Vector((float)accrec[acccount].X, (float)accrec[acccount].Y, (float)accrec[acccount].Z);
-                fusion.KalmanFusion(vec, ManagerTypes.IMU, new PositionUpdatedEventArgs(vec));
-                int i = (int)((accrec[acccount + 1].time - accrec[acccount].time) * 1000);
-                acctimer.Change(i, 1000);
-                acccount++;
-            }
-            else
-            {
-                acctimer.Dispose();
-            }
-        }
-
-        private void beaconcallback(object x)
-        {
-            if (beaconcount < beaconrec.Count)
-            {
-                var vec = new Vector((float)beaconrec[beaconcount].X, (float)beaconrec[beaconcount].Y, (float)beaconrec[beaconcount].Z);
-                fusion.KalmanFusion(vec, ManagerTypes.BEACON, new PositionUpdatedEventArgs(vec));
-                beaconcount++;
-            }
-            else
-            {
-                beacontimer.Dispose();
-            }
-        }
         private void Button_Clicked2(object sender, EventArgs e)
         {
             label_onoff.Text = "OFF";
@@ -203,7 +184,7 @@ namespace IMUTest
                 return _thisManager;
             }
 
-            public Vector KalmanFusion(Vector vec, ManagerTypes manager, IPhysEvent args)
+            public Vector KalmanFusion(Vector vec, ManagerTypes manager, IPhysEvent args, TimeSpan timespan)
             {
                 if (State == SensorFusionState.Uninitzialized)
                 {
@@ -212,7 +193,6 @@ namespace IMUTest
                         x0 = Matrix<double>.Build.Dense(6, 1, new[] { vec.X, vec.Y, 0d, 0d, 0d, 0d });
                         dkf = new DiscreteKalmanFilter(x0, p0);
                         State = SensorFusionState.Inizialized;
-                        imutimestamp[0] = DateTime.UtcNow;
                         listresult.Add(manager.ToString() + ';' + "0.0" + ';' + dkf.State[0, 0].ToString().Replace(',', '.') + ';' + dkf.State[1, 0].ToString().Replace(',', '.') + System.Environment.NewLine);
                         return vec;
                     }
@@ -226,10 +206,6 @@ namespace IMUTest
                 }
                 else
                 {
-                    //get time delta
-                    imutimestamp[1] = DateTime.UtcNow;
-                    timespan = (imutimestamp[1] - imutimestamp[0]);
-                    imutimestamp[0] = imutimestamp[1];
                     //fill state transition matrix
                     F = Matrix<double>.Build.Dense(6, 6, new[] { 1d, 0d, timespan.TotalSeconds, 0d, 0.5 * System.Math.Pow(timespan.TotalSeconds,2), 0d,
                                                              0d, 1d, 0d, timespan.TotalSeconds, 0d, 0.5 * System.Math.Pow(timespan.TotalSeconds,2),
@@ -248,6 +224,11 @@ namespace IMUTest
                 listresult.Add(manager.ToString() + ';' + timespan.TotalSeconds.ToString().Replace(',', '.') + ';' + dkf.State[0, 0].ToString().Replace(',', '.') + ';' + dkf.State[1, 0].ToString().Replace(',', '.') + System.Environment.NewLine);
                 Vector result = new Vector((float)dkf.State[0, 0], (float)dkf.State[1, 0], 0);
                 return result;
+            }
+
+            internal void KalmanFusion(Vector vec, ManagerTypes iMU, PositionUpdatedEventArgs positionUpdatedEventArgs, double v)
+            {
+                throw new NotImplementedException();
             }
         }
 
@@ -338,14 +319,16 @@ namespace IMUTest
 
         public class Records
         {
+            public string type { get; set; }
             public double time { get; set; }
             public double X { get; set; }
             public double Y { get; set; }
             public double Z { get; set; }
 
 
-            public Records(double partime, double parx, double pary, double parz)
+            public Records(string partype, double partime, double parx, double pary, double parz)
             {
+                type = partype;
                 time = partime;
                 X = parx;
                 Y = pary;

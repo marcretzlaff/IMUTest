@@ -30,8 +30,8 @@ namespace IMUTest
         public double? requiredRotationInDegrees = null;
 
         private string linpath = null;
-        private string lowaccpath = null;
         private string positionpath = null;
+        private string endpath = null;
         private string timepath = null;
 
         double[,] acceleration = new double[2, 3];
@@ -51,10 +51,12 @@ namespace IMUTest
             linpath = System.IO.Path.Combine(storagepath, "lindata.csv");
             positionpath = System.IO.Path.Combine(storagepath, "positiondata.csv");
             timepath = System.IO.Path.Combine(storagepath, "timedata.csv");
+            endpath = System.IO.Path.Combine(storagepath, "enddata.csv");
 
             if (System.IO.File.Exists(linpath)) System.IO.File.Delete(linpath);
             if (System.IO.File.Exists(positionpath)) System.IO.File.Delete(positionpath);
             if (System.IO.File.Exists(timepath)) System.IO.File.Delete(timepath);
+            if (System.IO.File.Exists(endpath)) System.IO.File.Delete(endpath);
         }
 
         private void acc_read(object sender, AccelerometerChangedEventArgs e)
@@ -172,6 +174,8 @@ namespace IMUTest
                 acceleration[1, 0] = res.X;
                 acceleration[1, 1] = res.Y;
             }
+            AccVector korregiertervector = new AccVector((float)acceleration[1, 0], (float)acceleration[1, 1], (float)acceleration[1, 2]);
+            System.IO.File.AppendAllText(endpath, linaccspan.TotalSeconds.ToString().Replace(',', '.') + ';' + korregiertervector.ToString(linacctime[1]) + System.Environment.NewLine);
 
             //integrate
             velocity[1, 0] = velocity[0, 0] + (acceleration[0, 0] + (acceleration[1, 0] - acceleration[0, 0]) / 2) * linaccspan.TotalSeconds;

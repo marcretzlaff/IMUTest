@@ -136,9 +136,9 @@ namespace IMUTest
 
         private void integration(AccVector vec)
         {
-            acceleration[1, 0] = (0.5 * acceleration[0, 0]) + (0.5 * (vec.x - calibration[1, 0]));
-            acceleration[1, 1] = (0.5 * acceleration[0, 1]) + (0.5 * (vec.y - calibration[1, 1]));
-            acceleration[1, 2] = (0.5 * acceleration[0, 2]) + (0.5 * (vec.z - calibration[1, 2]));
+            acceleration[1, 0] = (0.3 * acceleration[0, 0]) + (0.7 * (vec.x - calibration[1, 0]));
+            acceleration[1, 1] = (0.3 * acceleration[0, 1]) + (0.7 * (vec.y - calibration[1, 1]));
+            acceleration[1, 2] = (0.3 * acceleration[0, 2]) + (0.7 * (vec.z - calibration[1, 2]));
 
             acceleration[0, 0] = acceleration[1, 0];
             acceleration[0, 1] = acceleration[1, 1]; 

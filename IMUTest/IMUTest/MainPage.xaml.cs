@@ -67,6 +67,7 @@ namespace IMUTest
                     fusion.KalmanFusion(vec, ManagerTypes.IMU, new PositionUpdatedEventArgs(vec), TimeSpan.FromSeconds(row.span));
                 }
             }
+            label_onoff.Text = "Finished";
         }
 
         private void Button_Clicked2(object sender, EventArgs e)
@@ -104,32 +105,30 @@ namespace IMUTest
             #region Matrizen
             private Matrix<double> x0 = Matrix<double>.Build.Dense(6, 1, new[] { 0d, 0d, 0d, 0d, 0d, 0d }); // State Representation: [ x y x' y' x'' y'']
             private Matrix<double> p0 = Matrix<double>.Build.Dense(6, 6, new[] { 10d, 0d, 0d, 0d, 0d, 0d,  //Covariance of inital State (same as x0 with m x m) as we start at zero
-                                                                             0d, 10d, 0d, 0d, 0d, 0d,
-                                                                             0d, 0d, 10d, 0d, 0d, 0d,
-                                                                             0d, 0d, 0d, 10d, 0d, 0d,
-                                                                             0d, 0d, 0d, 0d, 10d, 0d,
-                                                                             0d, 0d, 0d, 0d, 0d, 10d});
+                                                                                 0d, 10d, 0d, 0d, 0d, 0d,
+                                                                                 0d, 0d, 10d, 0d, 0d, 0d,
+                                                                                 0d, 0d, 0d, 10d, 0d, 0d,
+                                                                                 0d, 0d, 0d, 0d, 10d, 0d,
+                                                                                 0d, 0d, 0d, 0d, 0d, 10d});
 
             //used with Beacon Event
             private Matrix<double> H_position = Matrix<double>.Build.Dense(2, 6, new[] { 1d, 0d, 0d, 0d, 0d, 0d,      // Measurement Model: [ 1 0 0 0 0 0
-                                                                                        0d, 1d, 0d, 0d, 0d, 0d });   //                      0 1 0 0 0 0 ]
+                                                                                        0d, 1d, 0d, 0d, 0d, 0d });    //                      0 1 0 0 0 0 ]
 
-            private Matrix<double> R_position = Matrix<double>.Build.Dense(2, 2, new[] { 0.05d, 0d,          //covariance of measurments BEACON
-                                                                                         0d, 0.05d });
+            private Matrix<double> R_position = Matrix<double>.Build.Dense(2, 2, new[] { 200d, 0d,          //covariance of measurments BEACON
+                                                                                         0d, 200d });
 
             //used with IMU Event
             private Matrix<double> H_acceleration = Matrix<double>.Build.Dense(2, 6, new[] { 0d, 0d, 0d, 0d, 1d, 0d,      // Measurement Model: [ 0 0 0 0 1 0
-                                                                                            0d, 0d, 0d, 0d, 0d, 1d });   //                      0 0 0 0 0 1 ]
+                                                                                            0d, 0d, 0d, 0d, 0d, 1d });    //                      0 0 0 0 0 1 ]
 
-            private Matrix<double> R_acceleration = Matrix<double>.Build.Dense(2, 2, new[] { 0.005d, 0d,           //covariance of measurments IMU
-                                                                                             0d, 0.005d });
+            private Matrix<double> R_acceleration = Matrix<double>.Build.Dense(2, 2, new[] { 50d, 0d,           //covariance of measurments IMU
+                                                                                             0d, 50d });
             //commonly used 
-            private Matrix<double> Q = Matrix<double>.Build.Dense(6, 6, new[] { 0.025d, 0d, 0d, 0d, 0d, 0d,  //plant noise covariance
-                                                                            0d, 0.025d, 0d, 0d, 0d, 0d,
-                                                                            0d, 0d, 0.025d, 0d, 0d, 0d,
-                                                                            0d, 0d, 0d, 0.025d, 0d, 0d,
-                                                                            0d, 0d, 0d, 0d, 0.025d, 0d,
-                                                                            0d, 0d, 0d, 0d, 0d, 0.025d});
+            //ca. 50ms for next step 
+            //https://nbviewer.jupyter.org/github/balzer82/Kalman/blob/master/Kalman-Filter-CA-2.ipynb?create=1
+            private double qdelta = 0.05d;
+            private Matrix<double> Q;
 
             private Matrix<double> F = Matrix<double>.Build.Dense(6, 6); // State Transition Matrix: [ 1 0 T 0 .5T^2   0      example, later filled with time delta
                                                                          //                            0 1 0 T   0   .5T^2
@@ -151,13 +150,17 @@ namespace IMUTest
             #endregion Matrizen
 
             private DiscreteKalmanFilter dkf;
-
-            private DateTime[] imutimestamp = new DateTime[2];
-            private TimeSpan timespan;
-
             private SensorFusion()
             {
                 State = SensorFusionState.Uninitzialized;
+                            
+                //fill q with qdelta
+                Q = Matrix<double>.Build.Dense(6, 6, new[] { 0.25d * System.Math.Pow(qdelta,4), 0.25d * System.Math.Pow(qdelta,4), 0.5d * System.Math.Pow(qdelta,3), 0.5d * System.Math.Pow(qdelta,3), 0.5d * System.Math.Pow(qdelta,2), 0.5d * System.Math.Pow(qdelta,2),  //plant noise covariance
+                                                             0.25d * System.Math.Pow(qdelta,4), 0.25d * System.Math.Pow(qdelta,4), 0.5d * System.Math.Pow(qdelta,3), 0.5d * System.Math.Pow(qdelta,3), 0.5d * System.Math.Pow(qdelta,2), 0.5d * System.Math.Pow(qdelta,2),
+                                                             0.5d * System.Math.Pow(qdelta,3), 0.5d * System.Math.Pow(qdelta,3), System.Math.Pow(qdelta,2), System.Math.Pow(qdelta,2), qdelta, qdelta,
+                                                             0.5d * System.Math.Pow(qdelta,3), 0.5d * System.Math.Pow(qdelta,3), System.Math.Pow(qdelta,2), System.Math.Pow(qdelta,2), qdelta, qdelta,
+                                                             0.5d * System.Math.Pow(qdelta,2), 0.5d * System.Math.Pow(qdelta,2), qdelta, qdelta, 1, 1,
+                                                             0.5d * System.Math.Pow(qdelta,2), 0.5d * System.Math.Pow(qdelta,2), qdelta, qdelta, 1, 1});
             }
             public static SensorFusion GetSensorFusion()
             {
@@ -173,7 +176,7 @@ namespace IMUTest
                         x0 = Matrix<double>.Build.Dense(6, 1, new[] { vec.X, vec.Y, 0d, 0d, 0d, 0d });
                         dkf = new DiscreteKalmanFilter(x0, p0);
                         State = SensorFusionState.Inizialized;
-                        listresult.Add(manager.ToString() + ';' + "0.0" + ';' + dkf.State[0, 0].ToString().Replace(',', '.') + ';' + dkf.State[1, 0].ToString().Replace(',', '.') + System.Environment.NewLine);
+                        listresult.Add(manager.ToString() + ';' + "0.0" + ';' + dkf.State[0, 0].ToString().Replace(',', '.') + ';' + dkf.State[1, 0].ToString().Replace(',', '.') +';' + dkf.State[1, 0].ToString().Replace(',', '.') + ';' + dkf.State[1, 0].ToString().Replace(',', '.') + System.Environment.NewLine);
                         return vec;
                     }
                     else return null; //kalman starts with first beacon event -> first location
@@ -188,11 +191,11 @@ namespace IMUTest
                 {
                     //fill state transition matrix
                     F = Matrix<double>.Build.Dense(6, 6, new[] { 1d, 0d, timespan.TotalSeconds, 0d, 0.5 * System.Math.Pow(timespan.TotalSeconds,2), 0d,
-                                                             0d, 1d, 0d, timespan.TotalSeconds, 0d, 0.5 * System.Math.Pow(timespan.TotalSeconds,2),
-                                                             0d, 0d, 1d, 0d, timespan.TotalSeconds, 0d,
-                                                             0d, 0d, 0d, 1d, 0d, timespan.TotalSeconds,
-                                                             0d, 0d, 0d, 0d, 1d, 0d,
-                                                             0d, 0d, 0d, 0d, 0d, 1d});
+                                                                 0d, 1d, 0d, timespan.TotalSeconds, 0d, 0.5 * System.Math.Pow(timespan.TotalSeconds,2),
+                                                                 0d, 0d, 1d, 0d, timespan.TotalSeconds, 0d,
+                                                                 0d, 0d, 0d, 1d, 0d, timespan.TotalSeconds,
+                                                                 0d, 0d, 0d, 0d, 1d, 0d,
+                                                                 0d, 0d, 0d, 0d, 0d, 1d});
 
                     dkf.Predict(F, Q); //predict state when IMU measurement given
 

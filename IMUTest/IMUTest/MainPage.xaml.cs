@@ -30,6 +30,7 @@ namespace IMUTest
         SensorFusion fusion = null;
 
         public static List<string> listresult = new List<string>();
+        private Vector accimu;
 
         public MainPage()
         {
@@ -59,11 +60,12 @@ namespace IMUTest
                 if(row.type == "Beacon")
                 {
                     var vec = new Vector((float)row.X, (float)row.Y, (float)row.Z);
-                    fusion.KalmanFusion(vec, ManagerTypes.BEACON, new PositionUpdatedEventArgs(vec), new TimeSpan());
+                    fusion.KalmanFusion(vec, ManagerTypes.BEACON, new PositionUpdatedEventArgs(accimu), new TimeSpan());
                 }
                 else
                 {
                     var vec = new Vector((float)row.X, (float)row.Y,(float) row.Z);
+                    accimu = vec;
                     fusion.KalmanFusion(vec, ManagerTypes.IMU, new PositionUpdatedEventArgs(vec), TimeSpan.FromSeconds(row.span));
                 }
             }
@@ -104,26 +106,23 @@ namespace IMUTest
 
             #region Matrizen
             private Matrix<double> x0 = Matrix<double>.Build.Dense(6, 1, new[] { 0d, 0d, 0d, 0d, 0d, 0d }); // State Representation: [ x y x' y' x'' y'']
-            private Matrix<double> p0 = Matrix<double>.Build.Dense(6, 6, new[] { 10d, 0d, 0d, 0d, 0d, 0d,  //Covariance of inital State (same as x0 with m x m) as we start at zero
-                                                                                 0d, 10d, 0d, 0d, 0d, 0d,
-                                                                                 0d, 0d, 10d, 0d, 0d, 0d,
-                                                                                 0d, 0d, 0d, 10d, 0d, 0d,
-                                                                                 0d, 0d, 0d, 0d, 10d, 0d,
-                                                                                 0d, 0d, 0d, 0d, 0d, 10d});
+            private Matrix<double> p0 = Matrix<double>.Build.Dense(6, 6, new[] { 1d, 0d, 0d, 0d, 0d, 0d,  //Covariance of inital State (same as x0 with m x m) as we start at zero
+                                                                                 0d, 1d, 0d, 0d, 0d, 0d,
+                                                                                 0d, 0d, 1d, 0d, 0d, 0d,
+                                                                                 0d, 0d, 0d, 1d, 0d, 0d,
+                                                                                 0d, 0d, 0d, 0d, 1d, 0d,
+                                                                                 0d, 0d, 0d, 0d, 0d, 1d});
 
             //used with Beacon Event
-            private Matrix<double> H_position = Matrix<double>.Build.Dense(2, 6, new[] { 1d, 0d, 0d, 0d, 0d, 0d,      // Measurement Model: [ 1 0 0 0 0 0
-                                                                                        0d, 1d, 0d, 0d, 0d, 0d });    //                      0 1 0 0 0 0 ]
+            private Matrix<double> H = Matrix<double>.Build.Dense(4, 6, new[] { 1d, 0d, 0d, 0d, 0d, 0d,      // Measurement Model: [ 1 0 0 0 0 0
+                                                                                0d, 1d, 0d, 0d, 0d, 0d,
+                                                                                0d, 0d, 0d, 0d, 1d, 0d,
+                                                                                0d, 0d, 0d, 0d, 0d, 1d});    //                      0 1 0 0 0 0 ]
 
-            private Matrix<double> R_position = Matrix<double>.Build.Dense(2, 2, new[] { 200d, 0d,          //covariance of measurments BEACON
-                                                                                         0d, 200d });
-
-            //used with IMU Event
-            private Matrix<double> H_acceleration = Matrix<double>.Build.Dense(2, 6, new[] { 0d, 0d, 0d, 0d, 1d, 0d,      // Measurement Model: [ 0 0 0 0 1 0
-                                                                                            0d, 0d, 0d, 0d, 0d, 1d });    //                      0 0 0 0 0 1 ]
-
-            private Matrix<double> R_acceleration = Matrix<double>.Build.Dense(2, 2, new[] { 50d, 0d,           //covariance of measurments IMU
-                                                                                             0d, 50d });
+            private Matrix<double> R = Matrix<double>.Build.Dense(4, 4, new[] { 200d, 0d, 0d, 0d,          //covariance of measurments BEACON
+                                                                                0d, 200d, 0d, 0d,
+                                                                                0d, 0d, 50d, 0d,
+                                                                                0d, 0d, 0d, 50d});
             //commonly used 
             //ca. 50ms for next step 
             //https://nbviewer.jupyter.org/github/balzer82/Kalman/blob/master/Kalman-Filter-CA-2.ipynb?create=1
@@ -173,7 +172,7 @@ namespace IMUTest
                 {
                     if (manager == ManagerTypes.BEACON)
                     {
-                        x0 = Matrix<double>.Build.Dense(6, 1, new[] { vec.X, vec.Y, 0d, 0d, 0d, 0d });
+                        x0 = Matrix<double>.Build.Dense(6, 1, new[] { vec.X, vec.Y, 0d, 0d, 0d, 0d});
                         dkf = new DiscreteKalmanFilter(x0, p0);
                         State = SensorFusionState.Inizialized;
                         listresult.Add(manager.ToString() + ';' + "0.0" + ';' + dkf.State[0, 0].ToString().Replace(',', '.') + ';' + dkf.State[1, 0].ToString().Replace(',', '.') +';' + dkf.State[1, 0].ToString().Replace(',', '.') + ';' + dkf.State[1, 0].ToString().Replace(',', '.') + System.Environment.NewLine);
@@ -184,8 +183,9 @@ namespace IMUTest
 
                 if (manager == ManagerTypes.BEACON)
                 {
-                    z = Matrix<double>.Build.Dense(2, 1, new double[] { vec.X, vec.Y }); // Measurement: [x y]
-                    dkf.Update(z, H_position, R_position);
+                    Vector imu = (args as PositionUpdatedEventArgs).accvec;
+                    z = Matrix<double>.Build.Dense(4, 1, new double[] { vec.X, vec.Y, imu.X, imu.Y }); // Measurement: [x y]
+                    dkf.Update(z, H, R);
                 }
                 else
                 {
@@ -198,10 +198,6 @@ namespace IMUTest
                                                                  0d, 0d, 0d, 0d, 0d, 1d});
 
                     dkf.Predict(F, Q); //predict state when IMU measurement given
-
-                    var acc = (args as PositionUpdatedEventArgs).accvec;
-                    z = Matrix<double>.Build.Dense(2, 1, new double[] { acc.X, acc.Y }); // Measurement: [x'' y'']
-                    dkf.Update(z, H_acceleration, R_acceleration);
                 }
 
                 listresult.Add(manager.ToString() + ';' + timespan.TotalSeconds.ToString().Replace(',', '.') + ';' + dkf.State[0, 0].ToString().Replace(',', '.') + ';' + dkf.State[1, 0].ToString().Replace(',', '.') + System.Environment.NewLine);

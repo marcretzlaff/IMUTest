@@ -98,9 +98,11 @@ namespace IMUTest
             {
                 accservice.ValuesChanged -= Calibrate;
                 label_cali.Text = "Calibrated";
+                label_cal.Text = "X: " + calibration[1, 0].ToString() + " Y: " + calibration[1, 1].ToString();
                 return false; // return true to repeat counting, false to stop timer
             });
             button_start.IsEnabled = true;
+            
         }
 
         #endregion buttons
@@ -197,6 +199,8 @@ namespace IMUTest
             position[0, 0] = position[1, 0];
             position[0, 1] = position[1, 1];
             position[0, 2] = position[1, 2];
+            label_x.Text = "X: " + position[1, 0].ToString();
+            label_y.Text = "Y: " + position[1, 1].ToString();
         }
 
         private Vector2 rotateAccelerationVectors(double degrees, Vector2 vec)

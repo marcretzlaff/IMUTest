@@ -23,8 +23,8 @@ namespace IMUTest
     {
         private IServiceACC accservice = null;
         private DateTime acctime;
-        private DateTime[] linacctime = new DateTime[2];
-        private TimeSpan linaccspan;
+        private DateTime oldtimestamp;
+        private TimeSpan deltatime;
         private int changed = 0;
         private const double DegreeToRadian = System.Math.PI / 180;
         public double? requiredRotationInDegrees = null;
@@ -74,7 +74,7 @@ namespace IMUTest
             Array.Clear(velocity, 0, velocity.Length);
             Array.Clear(position, 0, position.Length);
             Array.Clear(acceleration, 0, acceleration.Length);
-            linacctime[1] = DateTime.UtcNow;
+            oldtimestamp = DateTime.UtcNow;
             label_onoff.Text = "ON";
             accservice.ValuesChanged += SaveLin;
         }
@@ -112,13 +112,12 @@ namespace IMUTest
         {
             AccEventArgs args = e as AccEventArgs;
             AccVector vec = new AccVector(args.x, args.y, args.z);
-            linacctime[0] = linacctime[1];
-            linacctime[1] = DateTime.UtcNow;
-            linaccspan = linacctime[1] - linacctime[0];
-            System.IO.File.AppendAllText(timepath, linaccspan.TotalSeconds.ToString().Replace(',','.') + System.Environment.NewLine);
+            deltatime = args.stamp - oldtimestamp;
+            oldtimestamp = args.stamp;
+            System.IO.File.AppendAllText(timepath, deltatime.TotalSeconds.ToString().Replace(',','.') + System.Environment.NewLine);
 
-            integration(vec);
-            System.IO.File.AppendAllText(linpath, vec.ToString(linacctime[1]) + System.Environment.NewLine);
+            integration(vec,args.stamp);
+            System.IO.File.AppendAllText(linpath, vec.ToString(args.stamp) + System.Environment.NewLine);
         }
 
         private void Calibrate(object sender, EventArgs e)
@@ -136,7 +135,7 @@ namespace IMUTest
 
         #endregion linacc
 
-        private void integration(AccVector vec)
+        private void integration(AccVector vec, DateTime stamp)
         {
             acceleration[1, 0] = (0.3 * acceleration[0, 0]) + (0.7 * (vec.x - calibration[1, 0]));
             acceleration[1, 1] = (0.3 * acceleration[0, 1]) + (0.7 * (vec.y - calibration[1, 1]));
@@ -177,20 +176,20 @@ namespace IMUTest
                 acceleration[1, 1] = res.Y;
             }
             AccVector korregiertervector = new AccVector((float)acceleration[1, 0], (float)acceleration[1, 1], (float)acceleration[1, 2]);
-            System.IO.File.AppendAllText(endpath,"IMU" + ';' + linaccspan.TotalSeconds.ToString().Replace(',', '.') + ';' + korregiertervector.ToString(linacctime[1]) + System.Environment.NewLine);
+            System.IO.File.AppendAllText(endpath,"IMU" + ';' + deltatime.TotalSeconds.ToString().Replace(',', '.') + ';' + korregiertervector.ToString(stamp) + System.Environment.NewLine);
 
             //integrate
-            velocity[1, 0] = velocity[0, 0] + (acceleration[0, 0] + (acceleration[1, 0] - acceleration[0, 0]) / 2) * linaccspan.TotalSeconds;
-            velocity[1, 1] = velocity[0, 1] + (acceleration[0, 1] + (acceleration[1, 1] - acceleration[0, 1]) / 2) * linaccspan.TotalSeconds;
-            velocity[1, 2] = velocity[0, 2] + (acceleration[0, 2] + (acceleration[1, 2] - acceleration[0, 2]) / 2) * linaccspan.TotalSeconds;
+            velocity[1, 0] = velocity[0, 0] + (acceleration[0, 0] + (acceleration[1, 0] - acceleration[0, 0]) / 2) * deltatime.TotalSeconds;
+            velocity[1, 1] = velocity[0, 1] + (acceleration[0, 1] + (acceleration[1, 1] - acceleration[0, 1]) / 2) * deltatime.TotalSeconds;
+            velocity[1, 2] = velocity[0, 2] + (acceleration[0, 2] + (acceleration[1, 2] - acceleration[0, 2]) / 2) * deltatime.TotalSeconds;
 
             //integrate
-            position[1, 0] = position[0, 0] + (velocity[0, 0] + (velocity[1, 0] - velocity[0, 0]) / 2) * linaccspan.TotalSeconds;
-            position[1, 1] = position[0, 1] + (velocity[0, 1] + (velocity[1, 1] - velocity[0, 1]) / 2) * linaccspan.TotalSeconds;
-            position[1, 2] = position[0, 2] + (velocity[0, 2] + (velocity[1, 2] - velocity[0, 2]) / 2) * linaccspan.TotalSeconds;
+            position[1, 0] = position[0, 0] + (velocity[0, 0] + (velocity[1, 0] - velocity[0, 0]) / 2) * deltatime.TotalSeconds;
+            position[1, 1] = position[0, 1] + (velocity[0, 1] + (velocity[1, 1] - velocity[0, 1]) / 2) * deltatime.TotalSeconds;
+            position[1, 2] = position[0, 2] + (velocity[0, 2] + (velocity[1, 2] - velocity[0, 2]) / 2) * deltatime.TotalSeconds;
 
             AccVector posvector = new AccVector((float)position[1, 0], (float)position[1, 1], (float)position[1, 2]);
-            System.IO.File.AppendAllText(positionpath, posvector.ToString(linacctime[1]) + System.Environment.NewLine);
+            System.IO.File.AppendAllText(positionpath, posvector.ToString(stamp) + System.Environment.NewLine);
 
             velocity[0, 0] = velocity[1, 0];
             velocity[0, 1] = velocity[1, 1];

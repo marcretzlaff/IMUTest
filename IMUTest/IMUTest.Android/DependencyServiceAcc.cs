@@ -24,7 +24,7 @@ namespace IMUTest.Droid
         {
             sensorManager = (SensorManager)Android.App.Application.Context.GetSystemService(SensorService);
             linearSensor = sensorManager.GetDefaultSensor(SensorType.LinearAcceleration);
-            sensorManager.RegisterListener(this, linearSensor, SensorDelay.Ui);
+            sensorManager.RegisterListener(this, linearSensor, SensorDelay.Fastest);
         }
 
         public void Start()
@@ -48,7 +48,7 @@ namespace IMUTest.Droid
             if (e.Sensor.Type != SensorType.LinearAcceleration)
                 return;
 
-            var args = new AccEventArgs(e.Values[0], e.Values[1], e.Values[2]);
+            var args = new AccEventArgs(e.Values[0], e.Values[1], e.Values[2], DateTime.UtcNow);
             ValuesChanged?.Invoke(this, args);
         }
     }

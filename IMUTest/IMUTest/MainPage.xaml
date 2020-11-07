@@ -8,6 +8,9 @@
             <Label Text="IMU Test" HorizontalTextAlignment="Center" TextColor="White" FontSize="36"/>
         </Frame>
         <Label x:Name="label_Zeit" Text="" FontSize="16" Padding="30,0,30,0"/>
+        <Label x:Name="label_x" HorizontalTextAlignment="Center" TextColor="White" FontSize="24"/>
+        <Label x:Name="label_y" HorizontalTextAlignment="Center" TextColor="White" FontSize="24"/>
+        <Label x:Name="label_cal" HorizontalTextAlignment="Center" TextColor="White" FontSize="15"/>
         <Label>LINEAR ACCELERATION</Label>
         <Button x:Name="button_start" Text="Start" Clicked="Button_Clicked"/>
         <Button x:Name="button_stop" Text="Stop" Clicked="Button_Clicked2"/>

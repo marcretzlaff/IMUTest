@@ -39,6 +39,7 @@ namespace IMUTest
         double[,] position = new double[2, 3];
         double[,] calibration = new double[2, 3];
         private int endcount;
+        private int endmove = 0;
 
         public MainPage()
         {
@@ -162,6 +163,7 @@ namespace IMUTest
             if (endcount > 5)
             {
                 endcount = 0;
+                label_end.Text = (++endmove).ToString();
                 //die von davor 0 damit die danach auch null sind
                 velocity[0, 0] = 0;
                 velocity[0, 1] = 0;

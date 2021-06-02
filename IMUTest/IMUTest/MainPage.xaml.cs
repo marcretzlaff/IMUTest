@@ -22,6 +22,7 @@ namespace IMUTest
     public partial class MainPage : ContentPage
     {
         private IServiceACC accservice = null;
+        private IServiceRotation rotationservice = null;
         private DateTime acctime;
         private DateTime oldtimestamp;
         private TimeSpan deltatime;
@@ -33,11 +34,16 @@ namespace IMUTest
         private string positionpath = null;
         private string endpath = null;
         private string timepath = null;
+        private string endpospath = null;
 
         double[,] acceleration = new double[2, 3];
         double[,] velocity = new double[2, 3];
         double[,] position = new double[2, 3];
         double[,] calibration = new double[2, 3];
+        double[,] xyacceleration = new double[2, 3];
+        double[,] xyposition = new double[2, 3];
+        double[,] xyvelocity = new double[2, 3];
+        private float[] rotationMatrix = new float[9];
         private int endcount;
         private int endmove = 0;
 
@@ -53,11 +59,13 @@ namespace IMUTest
             positionpath = System.IO.Path.Combine(storagepath, "positiondata.csv");
             timepath = System.IO.Path.Combine(storagepath, "timedata.csv");
             endpath = System.IO.Path.Combine(storagepath, "enddata.csv");
+            endpospath = System.IO.Path.Combine(storagepath, "endposdata.csv");
 
             if (System.IO.File.Exists(linpath)) System.IO.File.Delete(linpath);
             if (System.IO.File.Exists(positionpath)) System.IO.File.Delete(positionpath);
             if (System.IO.File.Exists(timepath)) System.IO.File.Delete(timepath);
             if (System.IO.File.Exists(endpath)) System.IO.File.Delete(endpath);
+            if (System.IO.File.Exists(endpospath)) System.IO.File.Delete(endpospath);
         }
 
         private void acc_read(object sender, AccelerometerChangedEventArgs e)
@@ -71,15 +79,21 @@ namespace IMUTest
         {
             accservice = DependencyService.Resolve<IServiceACC>();
             accservice.Init();
-
+            rotationservice = DependencyService.Resolve<IServiceRotation>();
+            rotationservice.Init();
             Array.Clear(velocity, 0, velocity.Length);
             Array.Clear(position, 0, position.Length);
             Array.Clear(acceleration, 0, acceleration.Length);
             oldtimestamp = DateTime.UtcNow;
             label_onoff.Text = "ON";
             accservice.ValuesChanged += SaveLin;
+            rotationservice.ValuesChanged += save_rotation;
         }
-
+        private void save_rotation(object sender, EventArgs e)
+        {
+            RotationEventArgs args = e as RotationEventArgs;
+            SensorManager.GetRotationMatrixFromVector(rotationMatrix, args.values);
+        }
         private void Button_Clicked2(object sender, EventArgs e)
         {
             accservice.Stop();
@@ -140,15 +154,12 @@ namespace IMUTest
         {
             acceleration[1, 0] = (0.3 * acceleration[0, 0]) + (0.7 * (vec.x - calibration[1, 0]));
             acceleration[1, 1] = (0.3 * acceleration[0, 1]) + (0.7 * (vec.y - calibration[1, 1]));
-            acceleration[1, 2] = (0.3 * acceleration[0, 2]) + (0.7 * (vec.z - calibration[1, 2]));
 
             acceleration[0, 0] = acceleration[1, 0];
-            acceleration[0, 1] = acceleration[1, 1]; 
-            acceleration[0, 2] = acceleration[1, 2];
+            acceleration[0, 1] = acceleration[1, 1];
 
             if (!(acceleration[1, 0] > 0.05 || acceleration[1, 0] < -0.05)) acceleration[1, 0] = 0;
             if (!(acceleration[1, 1] > 0.05 || acceleration[1, 1] < -0.05)) acceleration[1, 1] = 0;
-            if (!(acceleration[1, 2] > 0.05 || acceleration[1, 2] < -0.05)) acceleration[1, 2] = 0;
 
             //end of movement
             if ((Math.Abs(acceleration[1, 0]) <= 0.01) && (Math.Abs(acceleration[1, 1]) <= 0.01))
@@ -177,29 +188,53 @@ namespace IMUTest
                 acceleration[1, 0] = res.X;
                 acceleration[1, 1] = res.Y;
             }
-            AccVector korregiertervector = new AccVector((float)acceleration[1, 0], (float)acceleration[1, 1], (float)acceleration[1, 2]);
+
+            /* roation transform */
+            for (int i = 0; i < 3; i++)
+            {
+                double s = 0;
+                for (int j = 0; j < 3; j++)
+                {
+                    s += acceleration[1, j] * rotationMatrix[j + i * 3];
+                }
+                xyacceleration[1, i] = s;
+            }
+            AccVector korregiertervector = new AccVector((float)xyacceleration[1, 0], (float)xyacceleration[1, 1], (float)xyacceleration[1, 2]);
             System.IO.File.AppendAllText(endpath,"IMU" + ';' + deltatime.TotalSeconds.ToString().Replace(',', '.') + ';' + korregiertervector.ToString(stamp) + System.Environment.NewLine);
 
             //integrate
             velocity[1, 0] = velocity[0, 0] + (acceleration[0, 0] + (acceleration[1, 0] - acceleration[0, 0]) / 2) * deltatime.TotalSeconds;
             velocity[1, 1] = velocity[0, 1] + (acceleration[0, 1] + (acceleration[1, 1] - acceleration[0, 1]) / 2) * deltatime.TotalSeconds;
-            velocity[1, 2] = velocity[0, 2] + (acceleration[0, 2] + (acceleration[1, 2] - acceleration[0, 2]) / 2) * deltatime.TotalSeconds;
 
             //integrate
             position[1, 0] = position[0, 0] + (velocity[0, 0] + (velocity[1, 0] - velocity[0, 0]) / 2) * deltatime.TotalSeconds;
             position[1, 1] = position[0, 1] + (velocity[0, 1] + (velocity[1, 1] - velocity[0, 1]) / 2) * deltatime.TotalSeconds;
-            position[1, 2] = position[0, 2] + (velocity[0, 2] + (velocity[1, 2] - velocity[0, 2]) / 2) * deltatime.TotalSeconds;
+
+            //integrate
+            xyvelocity[1, 0] = xyvelocity[0, 0] + (xyacceleration[0, 0] + (xyacceleration[1, 0] - xyacceleration[0, 0]) / 2) * deltatime.TotalSeconds;
+            xyvelocity[1, 1] = xyvelocity[0, 1] + (xyacceleration[0, 1] + (xyacceleration[1, 1] - xyacceleration[0, 1]) / 2) * deltatime.TotalSeconds;
+
+            //integrate
+            xyposition[1, 0] = xyposition[0, 0] + (xyvelocity[0, 0] + (xyvelocity[1, 0] - xyvelocity[0, 0]) / 2) * deltatime.TotalSeconds;
+            xyposition[1, 1] = xyposition[0, 1] + (xyvelocity[0, 1] + (xyvelocity[1, 1] - xyvelocity[0, 1]) / 2) * deltatime.TotalSeconds;
 
             AccVector posvector = new AccVector((float)position[1, 0], (float)position[1, 1], (float)position[1, 2]);
             System.IO.File.AppendAllText(positionpath, posvector.ToString(stamp) + System.Environment.NewLine);
+            posvector = new AccVector((float)xyposition[1, 0], (float)xyposition[1, 1], (float)xyposition[1, 2]);
+            System.IO.File.AppendAllText(endpospath, posvector.ToString(stamp) + System.Environment.NewLine);
 
             velocity[0, 0] = velocity[1, 0];
             velocity[0, 1] = velocity[1, 1];
-            velocity[0, 2] = velocity[1, 2];
 
             position[0, 0] = position[1, 0];
             position[0, 1] = position[1, 1];
-            position[0, 2] = position[1, 2];
+
+            xyvelocity[0, 0] = xyvelocity[1, 0];
+            xyvelocity[0, 1] = xyvelocity[1, 1];
+
+            xyposition[0, 0] = xyposition[1, 0];
+            xyposition[0, 1] = xyposition[1, 1];
+
             label_x.Text = "X: " + position[1, 0].ToString();
             label_y.Text = "Y: " + position[1, 1].ToString();
         }

@@ -154,12 +154,15 @@ namespace IMUTest
         {
             acceleration[1, 0] = (0.3 * acceleration[0, 0]) + (0.7 * (vec.x - calibration[1, 0]));
             acceleration[1, 1] = (0.3 * acceleration[0, 1]) + (0.7 * (vec.y - calibration[1, 1]));
+            acceleration[1, 2] = (0.3 * acceleration[0, 1]) + (0.7 * (vec.y - calibration[1, 2]));
 
             acceleration[0, 0] = acceleration[1, 0];
-            acceleration[0, 1] = acceleration[1, 1]; 
+            acceleration[0, 1] = acceleration[1, 1];
+            acceleration[0, 2] = acceleration[1, 2];
 
             if (!(acceleration[1, 0] > 0.05 || acceleration[1, 0] < -0.05)) acceleration[1, 0] = 0;
             if (!(acceleration[1, 1] > 0.05 || acceleration[1, 1] < -0.05)) acceleration[1, 1] = 0;
+            if (!(acceleration[1, 2] > 0.05 || acceleration[1, 2] < -0.05)) acceleration[1, 2] = 0;
 
             //end of movement
             if ((Math.Abs(acceleration[1, 0]) <= 0.01) && (Math.Abs(acceleration[1, 1]) <= 0.01))

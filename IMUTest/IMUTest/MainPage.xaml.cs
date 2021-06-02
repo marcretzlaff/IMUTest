@@ -192,7 +192,7 @@ namespace IMUTest
                 xyacceleration[1, i] = s;
             }
             AccVector korregiertervector = new AccVector((float)xyacceleration[1, 0], (float)xyacceleration[1, 1], (float)xyacceleration[1, 2]);
-            System.IO.File.AppendAllText(endpath,"IMU" + ';' + linaccspan.TotalSeconds.ToString().Replace(',', '.') + ';' + korregiertervector.ToString(linacctime[1]) + System.Environment.NewLine);
+            System.IO.File.AppendAllText(endpath,korregiertervector.ToString(linacctime[1]) + System.Environment.NewLine);
 
             //integrate
             velocity[1, 0] = velocity[0, 0] + (acceleration[0, 0] + (acceleration[1, 0] - acceleration[0, 0]) / 2) * linaccspan.TotalSeconds;

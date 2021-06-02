@@ -212,7 +212,7 @@ namespace IMUTest
 
             AccVector posvector = new AccVector((float)position[1, 0], (float)position[1, 1], (float)position[1, 2]);
             System.IO.File.AppendAllText(positionpath, posvector.ToString(linacctime[1]) + System.Environment.NewLine);
-            posvector = new AccVector((float)position[1, 0], (float)position[1, 1], (float)position[1, 2]);
+            posvector = new AccVector((float)xyposition[1, 0], (float)xyposition[1, 1], (float)xyposition[1, 2]);
             System.IO.File.AppendAllText(endpospath, posvector.ToString(linacctime[1]) + System.Environment.NewLine);
 
             velocity[0, 0] = velocity[1, 0];

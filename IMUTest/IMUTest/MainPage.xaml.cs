@@ -140,7 +140,7 @@ namespace IMUTest
 
             calibration[0, 0] = calibration[1, 0];
             calibration[0, 1] = calibration[1, 1];
-            calibration[0, 2] = calibration[1, 1];
+            calibration[0, 2] = calibration[1, 2];
         }
 
         #endregion linacc
@@ -154,7 +154,7 @@ namespace IMUTest
         {
             acceleration[1, 0] = (0.3 * acceleration[0, 0]) + (0.7 * (vec.x - calibration[1, 0]));
             acceleration[1, 1] = (0.3 * acceleration[0, 1]) + (0.7 * (vec.y - calibration[1, 1]));
-            acceleration[1, 2] = (0.3 * acceleration[0, 1]) + (0.7 * (vec.y - calibration[1, 2]));
+            acceleration[1, 2] = (0.3 * acceleration[0, 2]) + (0.7 * (vec.z - calibration[1, 2]));
 
             acceleration[0, 0] = acceleration[1, 0];
             acceleration[0, 1] = acceleration[1, 1];
@@ -180,8 +180,10 @@ namespace IMUTest
                 //die von davor 0 damit die danach auch null sind
                 velocity[0, 0] = 0;
                 velocity[0, 1] = 0;
+                velocity[0, 2] = 0;
                 xyvelocity[0, 0] = 0;
                 xyvelocity[0, 1] = 0;
+                xyvelocity[0, 2] = 0;
             }
 
             /* roation transform */
@@ -200,35 +202,45 @@ namespace IMUTest
             //integrate
             velocity[1, 0] = velocity[0, 0] + (acceleration[0, 0] + (acceleration[1, 0] - acceleration[0, 0]) / 2) * linaccspan.TotalSeconds;
             velocity[1, 1] = velocity[0, 1] + (acceleration[0, 1] + (acceleration[1, 1] - acceleration[0, 1]) / 2) * linaccspan.TotalSeconds;
+            velocity[1, 2] = velocity[0, 2] + (acceleration[0, 2] + (acceleration[1, 2] - acceleration[0, 2]) / 2) * linaccspan.TotalSeconds;
 
             //integrate
             position[1, 0] = position[0, 0] + (velocity[0, 0] + (velocity[1, 0] - velocity[0, 0]) / 2) * linaccspan.TotalSeconds;
             position[1, 1] = position[0, 1] + (velocity[0, 1] + (velocity[1, 1] - velocity[0, 1]) / 2) * linaccspan.TotalSeconds;
+            position[1, 2] = position[0, 2] + (velocity[0, 2] + (velocity[1, 2] - velocity[0, 2]) / 2) * linaccspan.TotalSeconds;
 
             //integrate
             xyvelocity[1, 0] = xyvelocity[0, 0] + (xyacceleration[0, 0] + (xyacceleration[1, 0] - xyacceleration[0, 0]) / 2) * linaccspan.TotalSeconds;
             xyvelocity[1, 1] = xyvelocity[0, 1] + (xyacceleration[0, 1] + (xyacceleration[1, 1] - xyacceleration[0, 1]) / 2) * linaccspan.TotalSeconds;
+            xyvelocity[1, 2] = xyvelocity[0, 2] + (xyacceleration[0, 2] + (xyacceleration[1, 2] - xyacceleration[0, 2]) / 2) * linaccspan.TotalSeconds;
 
             //integrate
             xyposition[1, 0] = xyposition[0, 0] + (xyvelocity[0, 0] + (xyvelocity[1, 0] - xyvelocity[0, 0]) / 2) * linaccspan.TotalSeconds;
             xyposition[1, 1] = xyposition[0, 1] + (xyvelocity[0, 1] + (xyvelocity[1, 1] - xyvelocity[0, 1]) / 2) * linaccspan.TotalSeconds;
+            xyposition[1, 2] = xyposition[0, 2] + (xyvelocity[0, 2] + (xyvelocity[1, 2] - xyvelocity[0, 2]) / 2) * linaccspan.TotalSeconds;
 
             AccVector posvector = new AccVector((float)position[1, 0], (float)position[1, 1], (float)position[1, 2]);
             System.IO.File.AppendAllText(positionpath, posvector.ToString(linacctime[1]) + System.Environment.NewLine);
+
+
             posvector = new AccVector((float)xyposition[1, 0], (float)xyposition[1, 1], (float)xyposition[1, 2]);
             System.IO.File.AppendAllText(endpospath, posvector.ToString(linacctime[1]) + System.Environment.NewLine);
 
             velocity[0, 0] = velocity[1, 0];
             velocity[0, 1] = velocity[1, 1];
+            velocity[0, 2] = velocity[1, 2];
 
             position[0, 0] = position[1, 0];
             position[0, 1] = position[1, 1];
+            position[0, 2] = position[1, 2];
 
             xyvelocity[0, 0] = xyvelocity[1, 0];
             xyvelocity[0, 1] = xyvelocity[1, 1];
+            xyvelocity[0, 2] = xyvelocity[1, 2];
 
             xyposition[0, 0] = xyposition[1, 0];
             xyposition[0, 1] = xyposition[1, 1];
+            xyposition[0, 2] = xyposition[1, 2];
 
             label_x.Text = "X: " + position[1, 0].ToString();
             label_y.Text = "Y: " + position[1, 1].ToString();

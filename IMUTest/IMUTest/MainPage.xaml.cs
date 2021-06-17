@@ -29,7 +29,7 @@ namespace IMUTest
         private float[] rotationMatrix = new float[9];
         private int changed = 0;
         private const double DegreeToRadian = System.Math.PI / 180;
-        public double? requiredRotationInDegrees = null;
+        public double? requiredRotationInDegrees = 45;
 
         private string linpath = null;
         private string positionpath = null;
@@ -198,6 +198,14 @@ namespace IMUTest
             }
             AccVector korregiertervector = new AccVector((float)xyacceleration[1, 0], (float)xyacceleration[1, 1], (float)xyacceleration[1, 2]);
             System.IO.File.AppendAllText(endpath,korregiertervector.ToString(linacctime[1]) + System.Environment.NewLine);
+
+            //rotate X,Y acceleration from world frame to map frame if required
+            if (requiredRotationInDegrees != null)
+            {
+                var res = rotateAccelerationVectors((double)requiredRotationInDegrees, new Vector2((float)xyacceleration[1, 0], (float)xyacceleration[1, 1]));
+                xyacceleration[1, 0] = res.X;
+                xyacceleration[1, 1] = res.Y;
+            }
 
             //integrate
             velocity[1, 0] = velocity[0, 0] + (acceleration[0, 0] + (acceleration[1, 0] - acceleration[0, 0]) / 2) * linaccspan.TotalSeconds;

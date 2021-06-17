@@ -29,7 +29,7 @@ namespace IMUTest
         private float[] rotationMatrix = new float[9];
         private int changed = 0;
         private const double DegreeToRadian = System.Math.PI / 180;
-        public double? requiredRotationInDegrees = 45;
+        public double? requiredRotationInDegrees = -45;
 
         private string linpath = null;
         private string positionpath = null;
@@ -156,10 +156,6 @@ namespace IMUTest
             acceleration[1, 1] = (0.3 * acceleration[0, 1]) + (0.7 * (vec.y - calibration[1, 1]));
             acceleration[1, 2] = (0.3 * acceleration[0, 2]) + (0.7 * (vec.z - calibration[1, 2]));
 
-            acceleration[0, 0] = acceleration[1, 0];
-            acceleration[0, 1] = acceleration[1, 1];
-            acceleration[0, 2] = acceleration[1, 2];
-
             if (!(acceleration[1, 0] > 0.05 || acceleration[1, 0] < -0.05)) acceleration[1, 0] = 0;
             if (!(acceleration[1, 1] > 0.05 || acceleration[1, 1] < -0.05)) acceleration[1, 1] = 0;
             if (!(acceleration[1, 2] > 0.05 || acceleration[1, 2] < -0.05)) acceleration[1, 2] = 0;
@@ -234,6 +230,10 @@ namespace IMUTest
             posvector = new AccVector((float)xyposition[1, 0], (float)xyposition[1, 1], (float)xyposition[1, 2]);
             System.IO.File.AppendAllText(endpospath, posvector.ToString(linacctime[1]) + System.Environment.NewLine);
 
+            acceleration[0, 0] = acceleration[1, 0];
+            acceleration[0, 1] = acceleration[1, 1];
+            acceleration[0, 2] = acceleration[1, 2];
+
             velocity[0, 0] = velocity[1, 0];
             velocity[0, 1] = velocity[1, 1];
             velocity[0, 2] = velocity[1, 2];
@@ -256,6 +256,8 @@ namespace IMUTest
 
             label_x.Text = "X: " + position[1, 0].ToString();
             label_y.Text = "Y: " + position[1, 1].ToString();
+            label_x_w.Text = "XW: " + xyposition[1, 0].ToString();
+            label_y_w.Text = "YW: " + xyposition[1, 1].ToString();
         }
 
         private Vector2 rotateAccelerationVectors(double degrees, Vector2 vec)

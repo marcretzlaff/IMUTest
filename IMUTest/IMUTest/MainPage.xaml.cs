@@ -242,6 +242,10 @@ namespace IMUTest
             position[0, 1] = position[1, 1];
             position[0, 2] = position[1, 2];
 
+            xyacceleration[0, 0] = xyacceleration[1, 0];
+            xyacceleration[0, 1] = xyacceleration[1, 1];
+            xyacceleration[0, 2] = xyacceleration[1, 2];
+
             xyvelocity[0, 0] = xyvelocity[1, 0];
             xyvelocity[0, 1] = xyvelocity[1, 1];
             xyvelocity[0, 2] = xyvelocity[1, 2];
